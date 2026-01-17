@@ -2,24 +2,19 @@
 
 import { Dialog, DialogContent } from "@/components/ui/dialog"
 import { Footer } from "@/components/footer"
-import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import { ArrowLeft } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
 
 import { useState, useEffect, useMemo } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
-import { AppNav } from "@/components/app-nav"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
-import { Users, Building2, User, Plus, X, Save, Trash2, Copy } from "lucide-react"
+import { Users, Building2, User, Plus, X, Save, Trash2, Copy, GripVertical } from "lucide-react"
 import { updateWorkspace, deleteWorkspace } from "@/app/actions/workspace"
 import type { Platform, WorkspaceType } from "@/types" // Import Platform and WorkspaceType
 
@@ -43,14 +38,62 @@ export default function SettingsPage() {
   const [currentCreatorIndex, setCurrentCreatorIndex] = useState(0)
   const [teamInvites, setTeamInvites] = useState<any[]>([])
 
+  const [postingFrequency, setPostingFrequency] = useState(7)
+  const [activeContentTypes, setActiveContentTypes] = useState<typeof allContentTypes>([])
+  const [bankContentTypes, setBankContentTypes] = useState<typeof allContentTypes>([])
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null)
+  const [dragSource, setDragSource] = useState<"active" | "bank" | null>(null)
+
   const [workspaceName, setWorkspaceName] = useState("")
   const [workspaceType, setWorkspaceType] = useState<WorkspaceType>("personal_creator")
   const [editCreators, setEditCreators] = useState<any[]>([])
   const [selectedPlatforms, setSelectedPlatforms] = useState<Record<number, string[]>>({})
 
+  const [primaryNiche, setPrimaryNiche] = useState("")
+
+  const [hasChanges, setHasChanges] = useState(false)
+  const [initialState, setInitialState] = useState<any>(null)
+
+  const allContentTypes = [
+    { id: 1, name: "Storytelling", description: "B-Roll Narrative", icon: "📖" },
+    { id: 2, name: "Behind the Scenes", description: "Day in the Life", icon: "🎬" },
+    { id: 3, name: "Education", description: "Teach One Skill", icon: "📚" },
+    { id: 4, name: "Entertainment", description: "Trending Format", icon: "🎥" },
+    { id: 5, name: "Inspiration", description: "Save-Worthy Breakdown", icon: "💡" },
+    { id: 6, name: "Trust", description: "Relatability / Split POV", icon: "🤝" },
+    { id: 7, name: "Depth", description: "Proof / Long-Form", icon: "🔍" },
+  ]
+
   useEffect(() => {
     loadData()
   }, [])
+
+  useEffect(() => {
+    if (!initialState || !isEditing) return
+
+    const changed =
+      workspaceName !== initialState.workspaceName ||
+      workspaceType !== initialState.workspaceType ||
+      primaryNiche !== initialState.primaryNiche ||
+      JSON.stringify(editCreators) !== JSON.stringify(initialState.editCreators) ||
+      JSON.stringify(selectedPlatforms) !== JSON.stringify(initialState.selectedPlatforms) ||
+      postingFrequency !== initialState.postingFrequency ||
+      JSON.stringify(activeContentTypes) !== JSON.stringify(initialState.activeContentTypes) ||
+      teamInvites.length > 0
+
+    setHasChanges(changed)
+  }, [
+    workspaceName,
+    workspaceType,
+    primaryNiche,
+    editCreators,
+    selectedPlatforms,
+    postingFrequency,
+    activeContentTypes,
+    teamInvites,
+    initialState,
+    isEditing,
+  ])
 
   const loadData = async () => {
     try {
@@ -85,22 +128,34 @@ export default function SettingsPage() {
 
       if (creatorsData) {
         setCreators(creatorsData)
-        setEditCreators(
-          creatorsData.map((c: any) => ({
-            id: c.id,
-            name: c.name,
-            brandName: c.brand_name,
-            primaryNiche: c.primary_niche,
-            subNiches: c.creator_sub_niches?.map((sn: any) => sn.sub_niche) || [],
-            platforms: c.creator_platforms?.map((cp: any) => cp.platform_id) || [],
-          })),
-        )
+        if (creatorsData.length > 0) {
+          setPrimaryNiche(creatorsData[0].primary_niche || "")
+        }
+        const creatorsArray = creatorsData.map((c: any) => ({
+          id: c.id,
+          name: c.name,
+          brandName: c.brand_name,
+          primaryNiche: c.primary_niche,
+          subNiches: c.creator_sub_niches?.map((sn: any) => sn.sub_niche) || [],
+          platforms: c.creator_platforms?.map((cp: any) => cp.platform_id) || [],
+        }))
+        setEditCreators(creatorsArray)
 
         const platformsObj: Record<number, string[]> = {}
         creatorsData.forEach((c: any, idx: number) => {
           platformsObj[idx] = c.creator_platforms?.map((cp: any) => cp.platform_id) || []
         })
         setSelectedPlatforms(platformsObj)
+
+        setInitialState({
+          workspaceName: membershipData.workspaces.name,
+          workspaceType: membershipData.workspaces.type,
+          primaryNiche: creatorsData[0]?.primary_niche || "",
+          editCreators: creatorsArray,
+          selectedPlatforms: platformsObj,
+          postingFrequency: 7, // Default for initial load
+          activeContentTypes: allContentTypes.slice(0, 7), // Default for initial load
+        })
       }
 
       const { data: teamMembersData } = await supabase
@@ -181,10 +236,12 @@ export default function SettingsPage() {
 
   const handleStartEdit = () => {
     setIsEditing(true)
+    setHasChanges(false)
   }
 
   const handleCancelEdit = () => {
     setIsEditing(false)
+    setHasChanges(false)
     loadData()
   }
 
@@ -199,7 +256,7 @@ export default function SettingsPage() {
           id: c.id,
           name: c.name || user?.email?.split("@")[0] || "Creator",
           brand_name: c.brandName,
-          primary_niche: c.primaryNiche,
+          primary_niche: workspaceType === "personal_creator" ? primaryNiche : c.primaryNiche,
           sub_niches: c.subNiches.filter(Boolean),
           platforms: selectedPlatforms[i] || [],
         }))
@@ -212,6 +269,11 @@ export default function SettingsPage() {
         },
         creators: creatorsData,
         teamInvites: teamInvites,
+        // Add content framework to save
+        contentFramework: {
+          postingFrequency: postingFrequency,
+          activeContentTypes: activeContentTypes.map((item) => item.id), // Save only IDs
+        },
       })
 
       if (result?.error) {
@@ -258,16 +320,44 @@ export default function SettingsPage() {
 
   const canEdit = membership?.role === "owner" || membership?.role === "admin"
 
+  const handleDragStart = (index: number, source: "active" | "bank") => {
+    setDraggedIndex(index)
+    setDragSource(source)
+  }
+
+  const handleDragEnd = () => {
+    setDraggedIndex(null)
+    setDragSource(null)
+  }
+
+  const handleDrop = (target: "active" | "bank", targetIndex: number) => {
+    if (draggedIndex !== null && dragSource !== null) {
+      const draggedItem = dragSource === "active" ? activeContentTypes[draggedIndex] : bankContentTypes[draggedIndex]
+      const newActive = [...activeContentTypes]
+      const newBank = [...bankContentTypes]
+
+      if (dragSource === "active") {
+        newActive.splice(draggedIndex, 1)
+      } else {
+        newBank.splice(draggedIndex, 1)
+      }
+
+      if (target === "active") {
+        newActive.splice(targetIndex, 0, draggedItem)
+      } else {
+        newBank.splice(targetIndex, 0, draggedItem)
+      }
+
+      setActiveContentTypes(newActive)
+      setBankContentTypes(newBank)
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background flex flex-col">
-        <AppNav userEmail={user?.email || ""} />
         <main className="container mx-auto p-6 space-y-6 flex-1">
-          <div className="flex items-center gap-2">
-            <Skeleton className="h-9 w-9 bg-muted" />
-            <Skeleton className="h-9 w-32 bg-muted" />
-          </div>
-
+          <Skeleton className="h-9 w-32 bg-muted" />
           <Skeleton className="h-5 w-80 bg-muted" />
 
           <Card>
@@ -287,30 +377,11 @@ export default function SettingsPage() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      <AppNav userEmail={user?.email || ""} />
-
       <main className="container mx-auto p-6 space-y-6 flex-1">
-        <div className="flex items-center gap-2">
-          <Link href="/profile" className="hover:opacity-70 transition-opacity">
-            <ArrowLeft className="size-6 text-foreground" />
-          </Link>
-          <h1 className="text-3xl font-bold">Settings</h1>
-        </div>
+        <h1 className="text-3xl font-bold">Settings</h1>
 
         <p className="text-muted-foreground">Configure workspace preferences and settings</p>
 
-        {canEdit && !isEditing && <Button onClick={handleStartEdit}>Edit Workspace</Button>}
-        {isEditing && (
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={handleCancelEdit} disabled={isSaving}>
-              Cancel
-            </Button>
-            <Button onClick={handleSave} disabled={isSaving}>
-              <Save className="size-4 mr-2" />
-              {isSaving ? "Saving..." : "Save Changes"}
-            </Button>
-          </div>
-        )}
         {error && (
           <Card className="border-destructive">
             <CardContent className="pt-6">
@@ -320,12 +391,28 @@ export default function SettingsPage() {
         )}
 
         {isEditing && (
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={handleCancelEdit} disabled={isSaving}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSave}
+              disabled={isSaving || !hasChanges}
+              className="bg-accent text-accent-foreground hover:bg-accent/90"
+            >
+              <Save className="size-4 mr-2" />
+              {isSaving ? "Saving..." : "Save Changes"}
+            </Button>
+          </div>
+        )}
+
+        {isEditing && (
           <Accordion
             type="multiple"
-            defaultValue={["workspace", "creators", "platforms", "team"]}
+            defaultValue={["workspace", "creators", "platforms", "framework", "team"]}
             className="space-y-4"
           >
-            <AccordionItem value="workspace" className="border rounded-lg px-6">
+            <AccordionItem value="workspace" className="border rounded-lg px-6 bg-white">
               <AccordionTrigger className="hover:no-underline">
                 <div className="flex items-center gap-2">
                   <Building2 className="size-5" />
@@ -337,45 +424,70 @@ export default function SettingsPage() {
                   <Label>Workspace Name</Label>
                   <Input value={workspaceName} onChange={(e) => setWorkspaceName(e.target.value)} />
                 </div>
+
+                {workspaceType === "personal_creator" && (
+                  <div className="space-y-2">
+                    <Label>Primary Niche</Label>
+                    <Input
+                      placeholder="Fitness, Tech, Finance, etc."
+                      value={editCreators[0]?.primaryNiche || ""}
+                      onChange={(e) => updateCreator(0, "primaryNiche", e.target.value)}
+                    />
+                  </div>
+                )}
+
                 <div className="space-y-3">
                   <Label>Workspace Type</Label>
-                  <RadioGroup value={workspaceType} onValueChange={(v) => setWorkspaceType(v as WorkspaceType)}>
-                    <div className="flex items-start space-x-3 p-4 border rounded-lg">
-                      <RadioGroupItem value="personal_creator" id="personal" />
-                      <label htmlFor="personal" className="flex-1 cursor-pointer">
-                        <div className="flex items-center gap-2 mb-1">
-                          <User className="size-4" />
-                          <span className="font-semibold">Personal Creator</span>
-                        </div>
-                        <p className="text-sm text-muted-foreground">Managing your own content and brand</p>
-                      </label>
-                    </div>
-                    <div className="flex items-start space-x-3 p-4 border rounded-lg">
-                      <RadioGroupItem value="manager" id="manager" />
-                      <label htmlFor="manager" className="flex-1 cursor-pointer">
-                        <div className="flex items-center gap-2 mb-1">
-                          <Users className="size-4" />
-                          <span className="font-semibold">Manager of Creators</span>
-                        </div>
-                        <p className="text-sm text-muted-foreground">Managing one or more creator brands</p>
-                      </label>
-                    </div>
-                    <div className="flex items-start space-x-3 p-4 border rounded-lg">
-                      <RadioGroupItem value="team_agency" id="team" />
-                      <label htmlFor="team" className="flex-1 cursor-pointer">
-                        <div className="flex items-center gap-2 mb-1">
-                          <Building2 className="size-4" />
-                          <span className="font-semibold">Team / Agency</span>
-                        </div>
-                        <p className="text-sm text-muted-foreground">Managing multiple creators with a full team</p>
-                      </label>
-                    </div>
-                  </RadioGroup>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <button
+                      type="button"
+                      onClick={() => setWorkspaceType("personal_creator")}
+                      className={`flex flex-col items-center p-6 border-2 rounded-lg cursor-pointer transition-all ${
+                        workspaceType === "personal_creator"
+                          ? "border-primary bg-primary/5 shadow-md"
+                          : "border-border hover:border-primary/50 hover:bg-muted/30"
+                      }`}
+                    >
+                      <User className={`size-8 mb-3 ${workspaceType === "personal_creator" ? "text-primary" : ""}`} />
+                      <span className="font-semibold text-center mb-2">Personal Creator</span>
+                      <p className="text-sm text-muted-foreground text-center">Managing your own content and brand</p>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setWorkspaceType("manager")}
+                      className={`flex flex-col items-center p-6 border-2 rounded-lg cursor-pointer transition-all ${
+                        workspaceType === "manager"
+                          ? "border-primary bg-primary/5 shadow-md"
+                          : "border-border hover:border-primary/50 hover:bg-muted/30"
+                      }`}
+                    >
+                      <Users className={`size-8 mb-3 ${workspaceType === "manager" ? "text-primary" : ""}`} />
+                      <span className="font-semibold text-center mb-2">Manager of Creators</span>
+                      <p className="text-sm text-muted-foreground text-center">Managing one or more creator brands</p>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setWorkspaceType("team_agency")}
+                      className={`flex flex-col items-center p-6 border-2 rounded-lg cursor-pointer transition-all ${
+                        workspaceType === "team_agency"
+                          ? "border-primary bg-primary/5 shadow-md"
+                          : "border-border hover:border-primary/50 hover:bg-muted/30"
+                      }`}
+                    >
+                      <Building2 className={`size-8 mb-3 ${workspaceType === "team_agency" ? "text-primary" : ""}`} />
+                      <span className="font-semibold text-center mb-2">Team / Agency</span>
+                      <p className="text-sm text-muted-foreground text-center">
+                        Managing multiple creators with a full team
+                      </p>
+                    </button>
+                  </div>
                 </div>
               </AccordionContent>
             </AccordionItem>
 
-            <AccordionItem value="creators" className="border rounded-lg px-6">
+            <AccordionItem value="creators" className="border rounded-lg px-6 bg-white">
               <AccordionTrigger className="hover:no-underline">
                 <div className="flex items-center gap-2">
                   <User className="size-5" />
@@ -387,7 +499,17 @@ export default function SettingsPage() {
               <AccordionContent className="space-y-6 pt-4">
                 {workspaceType === "personal_creator" ? (
                   <div className="space-y-4">
-                    <p className="text-sm text-muted-foreground">As a personal creator, add your sub-niches below.</p>
+                    <p className="text-sm text-muted-foreground">
+                      As a personal creator, you manage your own content and brand.
+                    </p>
+                    <div className="space-y-2">
+                      <Label>Primary Niche</Label>
+                      <Input
+                        placeholder="Fitness, Tech, Finance, etc."
+                        value={primaryNiche}
+                        onChange={(e) => setPrimaryNiche(e.target.value)}
+                      />
+                    </div>
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
                         <Label>Sub-Niches (up to 5)</Label>
@@ -510,7 +632,7 @@ export default function SettingsPage() {
               </AccordionContent>
             </AccordionItem>
 
-            <AccordionItem value="platforms" className="border rounded-lg px-6">
+            <AccordionItem value="platforms" className="border rounded-lg px-6 bg-white">
               <AccordionTrigger className="hover:no-underline">
                 <div className="flex items-center gap-2">
                   <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -526,33 +648,216 @@ export default function SettingsPage() {
               </AccordionTrigger>
               <AccordionContent className="space-y-6 pt-4">
                 {editCreators.map((creator: any, idx: number) => (
-                  <div key={idx} className="space-y-3">
-                    <Label className="text-base">
-                      {workspaceType === "personal_creator"
-                        ? "Your Platforms"
-                        : `Platforms for ${creator.name || `Creator ${idx + 1}`}`}
-                    </Label>
-                    <div className="grid grid-cols-2 gap-3">
-                      {platforms.map((platform) => (
-                        <div
-                          key={platform.id}
-                          className="flex items-center space-x-2 p-3 border rounded-lg cursor-pointer hover:bg-muted/50"
-                          onClick={() => togglePlatform(idx, platform.id)}
-                        >
-                          <Checkbox
-                            checked={selectedPlatforms[idx]?.includes(platform.id)}
-                            onCheckedChange={() => togglePlatform(idx, platform.id)}
-                          />
-                          <Label className="cursor-pointer flex-1">{platform.name}</Label>
-                        </div>
-                      ))}
+                  <div key={idx} className="space-y-4">
+                    {workspaceType !== "personal_creator" && (
+                      <h3 className="font-medium text-lg">{creator.name || `Creator ${idx + 1}`}</h3>
+                    )}
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                      {platforms.map((platform) => {
+                        const isSelected = selectedPlatforms[idx]?.includes(platform.id)
+
+                        const platformConfig: Record<
+                          string,
+                          { icon: string; bg: string; border: string; text: string }
+                        > = {
+                          youtube: {
+                            icon: "/icons/youtube.svg",
+                            bg: "bg-red-50",
+                            border: "border-red-600",
+                            text: "text-red-700",
+                          },
+                          tiktok: {
+                            icon: "/icons/tiktok.svg",
+                            bg: "bg-gradient-to-br from-cyan-50 via-pink-50 to-black/5",
+                            border: "border-black",
+                            text: "text-black",
+                          },
+                          instagram: {
+                            icon: "/icons/instagram.svg",
+                            bg: "bg-gradient-to-br from-purple-50 via-pink-50 to-orange-50",
+                            border: "border-pink-500",
+                            text: "text-pink-700",
+                          },
+                          twitter: {
+                            icon: "/icons/x.svg",
+                            bg: "bg-black/5",
+                            border: "border-black",
+                            text: "text-black",
+                          },
+                          x: {
+                            icon: "/icons/x.svg",
+                            bg: "bg-black/5",
+                            border: "border-black",
+                            text: "text-black",
+                          },
+                          linkedin: {
+                            icon: "/icons/linkedin.svg",
+                            bg: "bg-blue-50",
+                            border: "border-blue-700",
+                            text: "text-blue-800",
+                          },
+                          facebook: {
+                            icon: "/icons/facebook.svg",
+                            bg: "bg-blue-50",
+                            border: "border-blue-600",
+                            text: "text-blue-700",
+                          },
+                        }
+
+                        const config = platformConfig[platform.name.toLowerCase()] || {
+                          icon: "",
+                          bg: "bg-gray-50",
+                          border: "border-gray-400",
+                          text: "text-gray-700",
+                        }
+
+                        return (
+                          <div
+                            key={platform.id}
+                            className={`
+                              flex flex-col items-center justify-center p-4 rounded-lg cursor-pointer transition-all
+                              ${
+                                isSelected
+                                  ? `${config.bg} border-2 ${config.border} shadow-md`
+                                  : "bg-background border border-border hover:bg-muted/50"
+                              }
+                            `}
+                            onClick={() => togglePlatform(idx, platform.id)}
+                          >
+                            {config.icon ? (
+                              <img
+                                src={config.icon || "/placeholder.svg"}
+                                alt={platform.name}
+                                className="w-8 h-8 mb-2"
+                              />
+                            ) : (
+                              <span className="text-2xl mb-2">🔗</span>
+                            )}
+                            <span className={`text-sm font-medium ${isSelected ? config.text : "text-foreground"}`}>
+                              {platform.name}
+                            </span>
+                          </div>
+                        )
+                      })}
                     </div>
                   </div>
                 ))}
               </AccordionContent>
             </AccordionItem>
 
-            <AccordionItem value="team" className="border rounded-lg px-6">
+            <AccordionItem value="framework" className="border rounded-lg px-6 bg-white">
+              <AccordionTrigger className="hover:no-underline">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg font-semibold">@jun_yuh Content Framework</span>
+                </div>
+              </AccordionTrigger>
+              <AccordionContent className="space-y-6 pt-4">
+                <div className="p-4 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg">
+                  <h4 className="font-semibold text-blue-900 dark:text-blue-100 mb-2">
+                    @jun_yuh 7-Day Content Operating System
+                  </h4>
+                  <p className="text-sm text-blue-800 dark:text-blue-200">
+                    This framework ensures consistent content variety and strategic planning. Each day type has a
+                    specific purpose to engage and grow your audience.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>How many days per week will you post?</Label>
+                  <Select
+                    value={postingFrequency.toString()}
+                    onValueChange={(v) => {
+                      const freq = Number.parseInt(v)
+                      setPostingFrequency(freq)
+                      const newActive = allContentTypes.slice(0, freq)
+                      const newBank = allContentTypes.slice(freq)
+                      setActiveContentTypes(newActive)
+                      setBankContentTypes(newBank)
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="3">3 days / week</SelectItem>
+                      <SelectItem value="4">4 days / week</SelectItem>
+                      <SelectItem value="5">5 days / week</SelectItem>
+                      <SelectItem value="6">6 days / week</SelectItem>
+                      <SelectItem value="7">7 days / week</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <h3 className="font-semibold mb-3">Your Weekly Schedule</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {activeContentTypes.map((contentType, index) => {
+                        const isDragging = draggedIndex === index && dragSource === "active"
+
+                        return (
+                          <div key={contentType.id} className="space-y-2">
+                            <p className="text-center font-bold text-sm text-muted-foreground">Day {index + 1}</p>
+                            <div
+                              draggable
+                              onDragStart={() => handleDragStart(index, "active")}
+                              onDragOver={(e) => e.preventDefault()}
+                              onDrop={() => handleDrop("active", index)}
+                              onDragEnd={() => handleDragEnd()}
+                              className={`relative border-2 rounded-lg p-4 cursor-move transition-all ${
+                                isDragging
+                                  ? "border-dashed border-muted-foreground bg-muted/30"
+                                  : "border-border bg-card hover:border-primary/50"
+                              }`}
+                            >
+                              {isDragging ? (
+                                <div className="flex flex-col items-center justify-center h-24 text-muted-foreground">
+                                  <GripVertical className="w-6 h-6 mb-2" />
+                                  <p className="text-sm">Drop here</p>
+                                </div>
+                              ) : (
+                                <>
+                                  <GripVertical className="absolute top-2 right-2 w-5 h-5 text-muted-foreground" />
+                                  <div className="text-3xl mb-2">{contentType.icon}</div>
+                                  <h3 className="font-semibold text-lg">{contentType.name}</h3>
+                                  <p className="text-sm text-muted-foreground">{contentType.description}</p>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  {bankContentTypes.length > 0 && (
+                    <div>
+                      <h3 className="font-semibold mb-3">Content Bank (Drag to swap)</h3>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {bankContentTypes.map((contentType, index) => (
+                          <div
+                            key={contentType.id}
+                            draggable
+                            onDragStart={() => handleDragStart(index, "bank")}
+                            onDragOver={(e) => e.preventDefault()}
+                            onDrop={() => handleDrop("bank", index)}
+                            onDragEnd={() => handleDragEnd()}
+                            className="relative border-2 border-dashed border-muted-foreground rounded-lg p-4 cursor-move hover:border-primary/50 transition-all bg-muted/30"
+                          >
+                            <GripVertical className="absolute top-2 right-2 w-4 h-4 text-muted-foreground" />
+                            <div className="text-2xl mb-2">{contentType.icon}</div>
+                            <h3 className="font-semibold">{contentType.name}</h3>
+                            <p className="text-xs text-muted-foreground">{contentType.description}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+
+            <AccordionItem value="team" className="border rounded-lg px-6 bg-white">
               <AccordionTrigger className="hover:no-underline">
                 <div className="flex items-center gap-2">
                   <Users className="size-5" />
@@ -560,67 +865,128 @@ export default function SettingsPage() {
                 </div>
               </AccordionTrigger>
               <AccordionContent className="space-y-4 pt-4">
-                <p className="text-sm text-muted-foreground">Invite team members to collaborate on your workspace.</p>
-                <div className="space-y-3">
-                  {teamInvites.map((invite, idx) => (
-                    <div key={idx} className="grid grid-cols-2 gap-3 p-4 border rounded-lg">
-                      <div className="space-y-2">
-                        <Label>First Name</Label>
-                        <Input
-                          value={invite.firstName}
-                          onChange={(e) => updateInvite(idx, "firstName", e.target.value)}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Last Name</Label>
-                        <Input
-                          value={invite.lastName}
-                          onChange={(e) => updateInvite(idx, "lastName", e.target.value)}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Email</Label>
-                        <Input
-                          type="email"
-                          value={invite.email}
-                          onChange={(e) => updateInvite(idx, "email", e.target.value)}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Role</Label>
-                        <Select value={invite.role} onValueChange={(v) => updateInvite(idx, "role", v)}>
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="admin">Admin</SelectItem>
-                            <SelectItem value="editor">Editor</SelectItem>
-                            <SelectItem value="viewer">Viewer</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="col-span-2">
-                        <Button variant="destructive" size="sm" onClick={() => removeInvite(idx)}>
-                          <X className="size-4 mr-2" />
-                          Remove Invite
+                {workspaceType === "personal_creator" ? (
+                  <div className="p-4 bg-muted/50 rounded-lg text-center">
+                    <p className="text-sm text-muted-foreground">
+                      Team members are not available for Personal Creator workspaces. Upgrade to Manager of Creators or
+                      Team/Agency to add team members.
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="space-y-4">
+                      <h3 className="font-semibold">Current Team</h3>
+                      {teamMembers.map((member: any) => (
+                        <Card key={member.id} className="p-4">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="font-medium">
+                                {member.user_profiles?.first_name} {member.user_profiles?.last_name}
+                              </p>
+                              <p className="text-sm text-muted-foreground">{member.user_profiles?.email}</p>
+                            </div>
+                            <Badge variant="outline">{member.role}</Badge>
+                          </div>
+                        </Card>
+                      ))}
+                    </div>
+
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-semibold">Invite Team Members</h3>
+                        <Button variant="outline" size="sm" onClick={addInvite}>
+                          <Plus className="size-3 mr-1" />
+                          Add Invite
                         </Button>
                       </div>
+
+                      {teamInvites.map((invite, idx) => (
+                        <Card key={idx} className="p-4 space-y-4">
+                          <div className="flex items-start justify-between">
+                            <div className="grid grid-cols-2 gap-3 flex-1">
+                              <div className="space-y-2">
+                                <Label>First Name</Label>
+                                <Input
+                                  value={invite.firstName}
+                                  onChange={(e) => updateInvite(idx, "firstName", e.target.value)}
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label>Last Name</Label>
+                                <Input
+                                  value={invite.lastName}
+                                  onChange={(e) => updateInvite(idx, "lastName", e.target.value)}
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label>Email</Label>
+                                <Input
+                                  type="email"
+                                  value={invite.email}
+                                  onChange={(e) => updateInvite(idx, "email", e.target.value)}
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label>Role</Label>
+                                <Select value={invite.role} onValueChange={(value) => updateInvite(idx, "role", value)}>
+                                  <SelectTrigger>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {workspaceType !== "personal_creator" && (
+                                      <SelectItem value="creator">Creator</SelectItem>
+                                    )}
+                                    <SelectItem value="editor">Editor</SelectItem>
+                                    <SelectItem value="viewer">Viewer</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            </div>
+                            <Button variant="ghost" size="icon" onClick={() => removeInvite(idx)}>
+                              <X className="size-4" />
+                            </Button>
+                          </div>
+                        </Card>
+                      ))}
                     </div>
-                  ))}
-                  <Button variant="outline" onClick={addInvite} className="w-full bg-transparent">
-                    <Plus className="size-4 mr-2" />
-                    Add Team Member
-                  </Button>
-                </div>
+                  </>
+                )}
               </AccordionContent>
             </AccordionItem>
           </Accordion>
         )}
 
+        {isEditing && membership?.role === "owner" && (
+          <Card className="border-destructive">
+            <CardHeader>
+              <CardTitle className="text-destructive">Danger Zone</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h3 className="font-semibold mb-1">Delete Workspace</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Once you delete a workspace, there is no going back. Please be certain.
+                  </p>
+                </div>
+                <Button variant="destructive" onClick={() => setShowDeleteDialog(true)}>
+                  <Trash2 className="size-4 mr-2" />
+                  Delete Workspace
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {!isEditing && (
           <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Workspace Information</CardTitle>
+              {canEdit && (
+                <Button onClick={handleStartEdit} className="bg-accent text-accent-foreground hover:bg-accent/90">
+                  Edit Workspace
+                </Button>
+              )}
             </CardHeader>
             <CardContent className="space-y-4">
               <div>

@@ -78,26 +78,27 @@
   --font-sans: "Geist", "Geist Fallback";
   --font-mono: "Geist Mono", "Geist Mono Fallback";
 
-  /* Lighter brown/beige background with darker, more visible input color */
+  /* Changed primary color from #4a2f1a to even darker brown #3a2415 */
   --color-background: #faf7f2;
   --color-foreground: #1a1a1a;
   --color-card: #ffffff;
   --color-card-foreground: #1a1a1a;
   --color-popover: #ffffff;
   --color-popover-foreground: #1a1a1a;
-  --color-primary: #1a1a1a;
+  --color-primary: #3a2415;
   --color-primary-foreground: #ffffff;
   --color-secondary: #ebe7df;
   --color-secondary-foreground: #1a1a1a;
   --color-muted: #ebe7df;
   --color-muted-foreground: #737373;
-  --color-accent: #89cff0;
+  /* Define accent colors as CSS custom properties that change based on data-theme */
+  --color-accent: var(--theme-accent, #89cff0);
   --color-accent-foreground: #1a1a1a;
+  --color-ring: var(--theme-ring, #89cff0);
   --color-destructive: #ef4444;
   --color-destructive-foreground: #ffffff;
   --color-border: #d9d4ca;
   --color-input: #ede8df;
-  --color-ring: #89cff0;
   --radius-sm: 0.375rem;
   --radius-md: 0.5rem;
   --radius-lg: 0.625rem;
@@ -120,6 +121,46 @@
     @apply bg-background text-foreground;
   }
 
+  /* Set theme-specific accent colors that Tailwind will read */
+  :root {
+    --theme-accent: #89cff0;
+    --theme-ring: #89cff0;
+    /* Added darker, more saturated accent color for better contrast */
+    --theme-accent-dark: #3b9fd8;
+  }
+
+  /* Theme variant for "what about the girl?" preset (pink) */
+  [data-theme="girl"] {
+    --theme-accent: #ffc0cb;
+    --theme-ring: #ffc0cb;
+    /* Darker pink for better text visibility */
+    --theme-accent-dark: #ff8fa3;
+  }
+
+  /* Theme variant for "about a boy" preset (blue) - explicit declaration */
+  [data-theme="boy"] {
+    --theme-accent: #89cff0;
+    --theme-ring: #89cff0;
+    /* Darker blue for better text visibility */
+    --theme-accent-dark: #3b9fd8;
+  }
+
+  /* Theme variant for "dubai chocolate" preset (green) */
+  [data-theme="dubai"] {
+    --theme-accent: #d0e9c0;
+    --theme-ring: #d0e9c0;
+    /* Darker green for better text visibility */
+    --theme-accent-dark: #9bc785;
+  }
+
+  /* Theme variant for "mocha" preset (chocolate brown) */
+  [data-theme="mocha"] {
+    --theme-accent: #8f6251;
+    --theme-ring: #8f6251;
+    /* Darker chocolate brown for better text visibility */
+    --theme-accent-dark: #6b4839;
+  }
+
   /* Dark mode with proper input contrast */
   .dark {
     --color-background: #1a1510;
@@ -128,14 +169,12 @@
     --color-card-foreground: #fafafa;
     --color-popover: #2a241e;
     --color-popover-foreground: #fafafa;
-    --color-primary: #fafafa;
-    --color-primary-foreground: #1a1a1a;
+    --color-primary: #8b6239;
+    --color-primary-foreground: #fafafa;
     --color-secondary: #3a342d;
     --color-secondary-foreground: #fafafa;
     --color-muted: #3a342d;
     --color-muted-foreground: #a3a3a3;
-    --color-accent: #89cff0;
-    --color-accent-foreground: #1a1a1a;
     --color-border: #3a342d;
     --color-input: #3a342d;
     --color-ring: #89cff0;

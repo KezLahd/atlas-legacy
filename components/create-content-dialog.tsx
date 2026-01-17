@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Plus, ArrowRight, ArrowLeft } from "lucide-react"
+import { Plus, ArrowRight, ArrowLeft, Search } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type {
   Creator,
@@ -25,7 +25,7 @@ interface CreateContentDialogProps {
   workspaceId: string
   creators: Creator[]
   onContentCreated: () => void
-  workspaceType?: string // Added workspace type prop
+  workspaceType?: string
 }
 
 export function CreateContentDialog({
@@ -45,6 +45,9 @@ export function CreateContentDialog({
   const [fourHs, setFourHs] = useState<FourH[]>([])
   const [series, setSeries] = useState<Series[]>([])
   const [batches, setBatches] = useState<Batch[]>([])
+  const [storytellingFormats, setStorytellingFormats] = useState<any[]>([])
+  const [existingContent, setExistingContent] = useState<any[]>([])
+  const [contentTypes, setContentTypes] = useState<any[]>([]) // Added state for content type (framework day attribution)
 
   // Form state - Step 1: Context
   const [selectedCreator, setSelectedCreator] = useState<string>("")
@@ -60,12 +63,17 @@ export function CreateContentDialog({
   const [newBatchEndDate, setNewBatchEndDate] = useState("")
   const [newBatchCreators, setNewBatchCreators] = useState<string[]>([])
 
-  // Form state - Step 3: Strategy
-  const [selectedPillars, setSelectedPillars] = useState<string[]>([])
-  const [selectedFourH, setSelectedFourH] = useState<string>("none")
+  const [selectedPillar, setSelectedPillar] = useState<string>("")
+  const [selectedFourH, setSelectedFourH] = useState<string>("")
   const [selectedSeries, setSelectedSeries] = useState<string>("none")
   const [episodeNumber, setEpisodeNumber] = useState<string>("")
   const [style, setStyle] = useState<ContentStyle>("talking_head")
+  const [storytellingFormat, setStorytellingFormat] = useState<string>("none")
+  const [selectedContentType, setSelectedContentType] = useState<string>("") // Added state for content type (framework day attribution)
+
+  const [contentSearchQuery, setContentSearchQuery] = useState("")
+  const [filteredContent, setFilteredContent] = useState<any[]>([])
+  const [selectedTemplateContent, setSelectedTemplateContent] = useState<string>("")
 
   const [showSeriesForm, setShowSeriesForm] = useState(false)
   const [newSeriesName, setNewSeriesName] = useState("")
@@ -77,88 +85,151 @@ export function CreateContentDialog({
       selectedCreator !== "" &&
       selectedPlatforms.length > 0 &&
       format !== "" &&
-      selectedPillars.length > 0
+      selectedPillar !== ""
     )
   }
 
   const isSeriesPillarSelected = () => {
     const seriesPillar = pillars.find((p) => p.name === "Series")
-    return seriesPillar ? selectedPillars.includes(seriesPillar.id) : false
+    return seriesPillar ? selectedPillar === seriesPillar.id : false
+  }
+
+  const isStorytellingPillarSelected = () => {
+    const storytellingPillar = pillars.find((p) => p.name === "Storytelling")
+    return storytellingPillar ? selectedPillar === storytellingPillar.id : false
+  }
+
+  const isDoubleDownPillarSelected = () => {
+    const doubleDownPillar = pillars.find((p) => p.name === "Double Down")
+    return doubleDownPillar ? selectedPillar === doubleDownPillar.id : false
   }
 
   const getAvailableStyles = (): { value: ContentStyle; label: string }[] => {
-    const selectedPillarNames = pillars.filter((p) => selectedPillars.includes(p.id)).map((p) => p.name.toLowerCase())
+    const selectedPillarName = pillars.find((p) => p.id === selectedPillar)?.name.toLowerCase()
 
-    // Educational pillar styles
-    if (selectedPillarNames.includes("educational")) {
+    if (!selectedPillarName) return []
+
+    // Educational pillar styles (6 styles from backend)
+    if (selectedPillarName === "educational") {
       return [
         { value: "talking_head", label: "Talking Head" },
-        { value: "b_roll_storytelling", label: "B-roll with Voiceover" },
+        { value: "b_roll_voiceover", label: "B-roll with Voiceover" },
         { value: "interview", label: "Interview" },
         { value: "transformation", label: "Before/After Transformation" },
+        { value: "screen_recording", label: "Screen Recording Tutorial" },
+        { value: "demonstration", label: "Demonstration" },
+        { value: "other", label: "Other" },
       ]
     }
 
-    // Storytelling pillar styles
-    if (selectedPillarNames.includes("storytelling")) {
+    // Storytelling pillar styles (3 styles from backend)
+    if (selectedPillarName === "storytelling") {
       return [
-        { value: "talking_head", label: "Talking Head" },
-        { value: "b_roll_storytelling", label: "B-roll Storytelling" },
-        { value: "skit_dialogue", label: "Skit / Dialogue" },
+        { value: "voiceover", label: "Voiceover" },
+        { value: "shot_angle_change", label: "Shot/Angle Change" },
+        { value: "audio_broll_text", label: "Audio + B-roll + Text" },
+        { value: "other", label: "Other" },
       ]
     }
 
-    // Authority pillar styles
-    if (selectedPillarNames.includes("authority")) {
+    // Authority pillar styles (placeholder - to be researched)
+    if (selectedPillarName === "authority") {
       return [
         { value: "talking_head", label: "Talking Head" },
         { value: "interview", label: "Interview" },
         { value: "split_pov", label: "Split POV" },
+        { value: "other", label: "Other" },
       ]
     }
 
-    // Series or Double Down styles
-    if (selectedPillarNames.includes("series") || selectedPillarNames.includes("double down")) {
-      return [
-        { value: "talking_head", label: "Talking Head" },
-        { value: "b_roll_storytelling", label: "B-roll Storytelling" },
-        { value: "skit_dialogue", label: "Skit / Dialogue" },
-        { value: "transformation", label: "Transformation" },
-      ]
-    }
+    return []
+  }
 
-    // Default styles if no pillar selected
-    return [
-      { value: "talking_head", label: "Talking Head" },
-      { value: "skit_dialogue", label: "Skit / Dialogue" },
-      { value: "transformation", label: "Transformation" },
-      { value: "interview", label: "Interview" },
-      { value: "b_roll_storytelling", label: "B-roll Storytelling" },
-      { value: "split_pov", label: "Split POV" },
-    ]
+  const isBatchFormValid = () => {
+    return newBatchName.trim() !== "" && newBatchStartDate !== "" && newBatchEndDate !== ""
   }
 
   useEffect(() => {
     if (open) {
       loadData()
-      if (creators.length === 1 && !selectedCreator) {
+      if (creators.length === 1 || workspaceType === "personal_creator") {
         setSelectedCreator(creators[0].id)
       }
     }
-  }, [open, selectedCreator])
+  }, [open, selectedCreator, workspaceType])
+
+  useEffect(() => {
+    if (isDoubleDownPillarSelected() && selectedCreator) {
+      loadExistingContent()
+    }
+  }, [selectedPillar, selectedCreator])
+
+  useEffect(() => {
+    if (contentSearchQuery.trim() === "") {
+      setFilteredContent(existingContent)
+    } else {
+      const filtered = existingContent.filter((content) =>
+        content.hook?.toLowerCase().includes(contentSearchQuery.toLowerCase()),
+      )
+      setFilteredContent(filtered)
+    }
+  }, [contentSearchQuery, existingContent])
+
+  useEffect(() => {
+    if (selectedTemplateContent) {
+      const templateContent = existingContent.find((c) => c.id === selectedTemplateContent)
+      if (templateContent) {
+        if (templateContent.four_h_id) {
+          setSelectedFourH(templateContent.four_h_id)
+        }
+        if (templateContent.style) {
+          setStyle(templateContent.style)
+        }
+      }
+    }
+  }, [selectedTemplateContent, existingContent])
+
+  useEffect(() => {
+    if (selectedPillar && !isSeriesPillarSelected()) {
+      const availableStyles = getAvailableStyles()
+      if (availableStyles.length > 0) {
+        setStyle(availableStyles[0].value)
+      }
+    }
+  }, [selectedPillar])
 
   const loadData = async () => {
-    const [platformsRes, pillarsRes, fourHsRes, batchesRes] = await Promise.all([
-      supabase.from("platforms").select("*").order("name"),
+    let platformsRes
+    if (selectedCreator) {
+      // Fetch platforms specific to the selected creator
+      const { data: creatorPlatformsData } = await supabase
+        .from("creator_platforms")
+        .select("platforms(*)")
+        .eq("creator_id", selectedCreator)
+
+      platformsRes = { data: creatorPlatformsData?.map((cp: any) => cp.platforms) || [] }
+    } else {
+      // If no creator selected yet, show empty platforms
+      platformsRes = { data: [] }
+    }
+
+    const [pillarsRes, fourHsRes, batchesRes, storytellingFormatsRes, contentTypesRes] = await Promise.all([
       supabase.from("content_pillars").select("*").order("name"),
       supabase.from("four_hs").select("*").order("name"),
       supabase.from("batches").select("*").eq("workspace_id", workspaceId).order("created_at", { ascending: false }),
+      supabase.from("storytelling_formats").select("*").order("name"),
+      supabase
+        .from("content_types")
+        .select("*")
+        .order("id"), // Added contentTypes to the load data call
     ])
 
     if (platformsRes.data) setPlatforms(platformsRes.data)
     if (pillarsRes.data) setPillars(pillarsRes.data)
     if (fourHsRes.data) setFourHs(fourHsRes.data)
     if (batchesRes.data) setBatches(batchesRes.data)
+    if (storytellingFormatsRes.data) setStorytellingFormats(storytellingFormatsRes.data)
+    if (contentTypesRes.data) setContentTypes(contentTypesRes.data) // Set content types for framework day attribution
 
     if (selectedCreator) {
       const { data: seriesData } = await supabase
@@ -170,14 +241,24 @@ export function CreateContentDialog({
     }
   }
 
+  const loadExistingContent = async () => {
+    const { data } = await supabase
+      .from("content")
+      .select("*, four_hs(name)")
+      .eq("creator_id", selectedCreator)
+      .order("created_at", { ascending: false })
+      .limit(50)
+
+    if (data) {
+      setExistingContent(data)
+      setFilteredContent(data)
+    }
+  }
+
   const togglePlatform = (platformId: string) => {
     setSelectedPlatforms((prev) =>
       prev.includes(platformId) ? prev.filter((id) => id !== platformId) : [...prev, platformId],
     )
-  }
-
-  const togglePillar = (pillarId: string) => {
-    setSelectedPillars((prev) => (prev.includes(pillarId) ? prev.filter((id) => id !== pillarId) : [...prev, pillarId]))
   }
 
   const toggleBatchCreator = (creatorId: string) => {
@@ -187,8 +268,8 @@ export function CreateContentDialog({
   }
 
   const handleCreateBatch = async () => {
-    if (!newBatchName.trim()) {
-      alert("Please enter a batch name")
+    if (!isBatchFormValid()) {
+      alert("Please fill in batch name, start date, and end date")
       return
     }
 
@@ -262,25 +343,42 @@ export function CreateContentDialog({
 
   const handleSubmit = async () => {
     if (!isFormValid()) {
-      alert("Please fill in all required fields: Hook/Title, Creator, Platform(s), Format, and Content Pillar(s)")
+      alert("Please fill in all required fields: Hook/Title, Creator, Platform(s), Format, and Content Pillar")
       return
     }
 
     setIsLoading(true)
     try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      const contentData: any = {
+        workspace_id: workspaceId,
+        creator_id: selectedCreator,
+        hook,
+        format,
+        production_stage: "idea",
+        four_h_id: selectedFourH || null,
+        batch_id: selectedBatch !== "none" ? selectedBatch : null,
+        series_id: selectedSeries !== "none" ? selectedSeries : null,
+        episode_number: episodeNumber || null,
+        content_type_id: selectedContentType || null,
+        created_by: user?.id || null, // Added user tracking
+        updated_by: user?.id || null, // Added user tracking
+      }
+
+      if (!isSeriesPillarSelected()) {
+        contentData.style = style
+      }
+
+      if (isStorytellingPillarSelected() && storytellingFormat !== "none") {
+        contentData.storytelling_format = storytellingFormat
+      }
+
       const { data: newContent, error: contentError } = await supabase
         .from("content")
-        .insert({
-          creator_id: selectedCreator,
-          batch_id: selectedBatch === "none" ? null : selectedBatch,
-          series_id: selectedSeries === "none" ? null : selectedSeries,
-          episode_number: episodeNumber ? Number.parseInt(episodeNumber) : null,
-          format,
-          style,
-          four_h_id: selectedFourH === "none" ? null : selectedFourH,
-          production_stage: "idea",
-          hook: hook || null,
-        })
+        .insert(contentData)
         .select()
         .single()
 
@@ -293,10 +391,10 @@ export function CreateContentDialog({
         })
       }
 
-      for (const pillarId of selectedPillars) {
+      if (selectedPillar) {
         await supabase.from("content_content_pillars").insert({
           content_id: newContent.id,
-          pillar_id: pillarId,
+          pillar_id: selectedPillar,
         })
       }
 
@@ -316,12 +414,13 @@ export function CreateContentDialog({
     setSelectedBatch("none")
     setSelectedPlatforms([])
     setFormat("reel")
-    setSelectedPillars([])
-    setSelectedFourH("none")
+    setSelectedPillar("")
+    setSelectedFourH("")
     setSelectedSeries("none")
     setEpisodeNumber("")
     setStyle("talking_head")
     setHook("")
+    setStorytellingFormat("none")
     setShowBatchForm(false)
     setNewBatchName("")
     setNewBatchStartDate("")
@@ -330,10 +429,9 @@ export function CreateContentDialog({
     setShowSeriesForm(false)
     setNewSeriesName("")
     setNewSeriesType("custom")
-  }
-
-  const isBatchFormValid = () => {
-    return newBatchName.trim() !== "" && newBatchStartDate !== "" && newBatchEndDate !== ""
+    setContentSearchQuery("")
+    setSelectedTemplateContent("")
+    setSelectedContentType("") // Reset content type state
   }
 
   return (
@@ -344,28 +442,28 @@ export function CreateContentDialog({
           Create Content
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto shadow-2xl">
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto bg-white">
         <DialogHeader>
           <DialogTitle>Create New Content</DialogTitle>
         </DialogHeader>
 
         <Tabs value={currentTab} onValueChange={setCurrentTab}>
-          <TabsList className="grid w-full grid-cols-3 bg-muted/50">
+          <TabsList className="grid w-full grid-cols-3 bg-muted/30">
             <TabsTrigger
               value="context"
-              className="data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"
+              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
             >
               Context
             </TabsTrigger>
             <TabsTrigger
               value="batch"
-              className="data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"
+              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
             >
               Batch
             </TabsTrigger>
             <TabsTrigger
               value="strategy"
-              className="data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"
+              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
             >
               Strategy
             </TabsTrigger>
@@ -382,17 +480,18 @@ export function CreateContentDialog({
               <p className="text-xs text-muted-foreground">A catchy title or opening line for this content</p>
             </div>
 
+            {/* Creator Selection */}
             {workspaceType !== "personal_creator" && (
               <div className="space-y-2">
-                <Label>Creator *</Label>
+                <Label htmlFor="creator">Creator *</Label>
                 <Select value={selectedCreator} onValueChange={setSelectedCreator}>
-                  <SelectTrigger>
+                  <SelectTrigger id="creator">
                     <SelectValue placeholder="Select creator" />
                   </SelectTrigger>
                   <SelectContent>
                     {creators.map((creator) => (
                       <SelectItem key={creator.id} value={creator.id}>
-                        {creator.name}
+                        {creator.name || creator.brand_name}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -416,6 +515,9 @@ export function CreateContentDialog({
                   </div>
                 ))}
               </div>
+              <p className="text-xs text-muted-foreground">
+                Edit workspace in profile page to change platform preferences
+              </p>
             </div>
 
             <div className="space-y-2">
@@ -489,7 +591,7 @@ export function CreateContentDialog({
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label>Start Date</Label>
+                    <Label>Start Date *</Label>
                     <Input
                       type="date"
                       value={newBatchStartDate}
@@ -497,7 +599,7 @@ export function CreateContentDialog({
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>End Date</Label>
+                    <Label>End Date *</Label>
                     <Input type="date" value={newBatchEndDate} onChange={(e) => setNewBatchEndDate(e.target.value)} />
                   </div>
                 </div>
@@ -532,58 +634,142 @@ export function CreateContentDialog({
             )}
           </TabsContent>
 
-          <TabsContent value="strategy" className="space-y-4 mt-4">
-            <div className="space-y-2">
-              <Label>Content Pillars *</Label>
+          <TabsContent value="strategy" className="space-y-4">
+            <div className="space-y-2 mt-6">
+              <Label>@avayuergens Content Pillar *</Label>
               <div className="grid grid-cols-2 gap-2">
                 {pillars.map((pillar) => (
-                  <div key={pillar.id} className="flex items-center space-x-2">
-                    <Checkbox
-                      id={pillar.id}
-                      checked={selectedPillars.includes(pillar.id)}
-                      onCheckedChange={() => togglePillar(pillar.id)}
-                    />
-                    <label htmlFor={pillar.id} className="text-sm cursor-pointer">
-                      {pillar.name}
-                    </label>
-                  </div>
+                  <Button
+                    key={pillar.id}
+                    type="button"
+                    variant={selectedPillar === pillar.id ? "default" : "outline"}
+                    className="w-full justify-start"
+                    onClick={() => setSelectedPillar(pillar.id)}
+                  >
+                    {pillar.name}
+                  </Button>
                 ))}
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label>4H Framework</Label>
-              <Select value={selectedFourH} onValueChange={setSelectedFourH}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select 4H" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
-                  {fourHs.map((fourH) => (
-                    <SelectItem key={fourH.id} value={fourH.id}>
-                      {fourH.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {isDoubleDownPillarSelected() && (
+              <div className="space-y-2">
+                <Label>Search Existing Content</Label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search by hook/title..."
+                    value={contentSearchQuery}
+                    onChange={(e) => setContentSearchQuery(e.target.value)}
+                    className="pl-9"
+                  />
+                </div>
+                {filteredContent.length > 0 && (
+                  <div className="max-h-48 overflow-y-auto border rounded-md">
+                    {filteredContent.map((content) => (
+                      <button
+                        key={content.id}
+                        type="button"
+                        className={`w-full text-left p-3 hover:bg-muted/50 border-b last:border-b-0 ${
+                          selectedTemplateContent === content.id ? "bg-primary/10" : ""
+                        }`}
+                        onClick={() => setSelectedTemplateContent(content.id)}
+                      >
+                        <p className="text-sm font-medium">{content.hook || "Untitled"}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {content.format} • {content.four_hs?.name || "No framework"}
+                        </p>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {selectedPillar && !isSeriesPillarSelected() && getAvailableStyles().length > 0 && (
+              <div className="space-y-2">
+                <Label>Content Style</Label>
+                <Select
+                  value={style}
+                  onValueChange={(v) => setStyle(v as ContentStyle)}
+                  disabled={isDoubleDownPillarSelected() && selectedTemplateContent !== ""}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {getAvailableStyles().map((styleOption) => (
+                      <SelectItem key={styleOption.value} value={styleOption.value}>
+                        {styleOption.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {isStorytellingPillarSelected() && (
+              <div className="space-y-2">
+                <Label>Storytelling Format</Label>
+                <Select value={storytellingFormat} onValueChange={setStorytellingFormat}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select format" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None</SelectItem>
+                    {storytellingFormats.map((format) => (
+                      <SelectItem key={format.id} value={format.id}>
+                        {format.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Choose the type of story: Big Goal, Change, Transformation, etc.
+                </p>
+              </div>
+            )}
+
+            {selectedPillar && !isDoubleDownPillarSelected() && !isSeriesPillarSelected() && (
+              <div className="space-y-2">
+                <Label>@jun_yuh Framework Day (Optional)</Label>
+                <p className="text-xs text-muted-foreground">
+                  Link this content to a specific day in your posting schedule
+                </p>
+                <Select value={selectedContentType} onValueChange={setSelectedContentType}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select framework day..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None</SelectItem>
+                    {contentTypes.map((ct) => (
+                      <SelectItem key={ct.id} value={ct.id.toString()}>
+                        Day {ct.id}: {ct.icon} {ct.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             <div className="space-y-2">
-              <Label>Content Style</Label>
-              <Select value={style} onValueChange={(v) => setStyle(v as ContentStyle)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {getAvailableStyles().map((styleOption) => (
-                    <SelectItem key={styleOption.value} value={styleOption.value}>
-                      {styleOption.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {selectedPillars.length === 0 && (
-                <p className="text-xs text-muted-foreground">Select a content pillar to see relevant styles</p>
+              <Label>4H Framework</Label>
+              <div className="grid grid-cols-4 gap-2">
+                {fourHs.map((fourH) => (
+                  <Button
+                    key={fourH.id}
+                    type="button"
+                    variant={selectedFourH === fourH.id ? "default" : "outline"}
+                    className="w-full"
+                    onClick={() => setSelectedFourH(selectedFourH === fourH.id ? "" : fourH.id)}
+                    disabled={isDoubleDownPillarSelected() && selectedTemplateContent !== ""}
+                  >
+                    {fourH.name}
+                  </Button>
+                ))}
+              </div>
+              {selectedFourH === "" && (
+                <p className="text-xs text-muted-foreground">Select a framework: Hook, How-to, Hack, or Help</p>
               )}
             </div>
 
@@ -694,7 +880,11 @@ export function CreateContentDialog({
           </Button>
 
           {currentTab === "strategy" ? (
-            <Button onClick={handleSubmit} disabled={isLoading || !isFormValid()}>
+            <Button
+              onClick={handleSubmit}
+              disabled={isLoading || !isFormValid()}
+              className="bg-accent hover:bg-accent/90 text-accent-foreground"
+            >
               {isLoading ? "Creating..." : "Create Content"}
             </Button>
           ) : (
@@ -706,6 +896,7 @@ export function CreateContentDialog({
                   setCurrentTab(tabs[currentIndex + 1])
                 }
               }}
+              className="bg-accent hover:bg-accent/90 text-accent-foreground"
             >
               Next
               <ArrowRight className="size-4 ml-2" />

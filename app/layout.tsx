@@ -2,6 +2,7 @@ import type React from "react"
 import type { Metadata } from "next"
 import { Geist, Geist_Mono } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
+import { ThemeLoader } from "@/components/theme-loader"
 import "./globals.css"
 
 const _geist = Geist({ subsets: ["latin"] })
@@ -38,7 +39,26 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  const theme = localStorage.getItem('atlas-theme');
+                  if (theme === 'what-about-the-girl') {
+                    document.documentElement.setAttribute('data-theme', 'girl');
+                  } else {
+                    document.documentElement.setAttribute('data-theme', 'boy');
+                  }
+                } catch (e) {}
+              })();
+            `,
+          }}
+        />
+      </head>
       <body className={`font-sans antialiased`}>
+        <ThemeLoader />
         {children}
         <Analytics />
       </body>

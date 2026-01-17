@@ -659,18 +659,6 @@ export default function OnboardingPage() {
                                 border: "border-red-600",
                                 text: "text-red-700",
                               },
-                              "youtube shorts": {
-                                icon: "/icons/youtube.svg",
-                                bg: "bg-red-50",
-                                border: "border-red-600",
-                                text: "text-red-700",
-                              },
-                              "youtube long": {
-                                icon: "/icons/youtube.svg",
-                                bg: "bg-red-50",
-                                border: "border-red-600",
-                                text: "text-red-700",
-                              },
                               tiktok: {
                                 icon: "/icons/tiktok.svg",
                                 bg: "bg-gradient-to-br from-cyan-50 via-pink-50 to-black/5",

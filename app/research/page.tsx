@@ -4,13 +4,17 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { AppNav } from "@/components/app-nav"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { CreateResearchDialog } from "@/components/create-research-dialog"
+import { EditResearchDialog } from "@/components/edit-research-dialog"
+import { UpdateResearchMetricsDialog } from "@/components/update-research-metrics-dialog"
 import type { Research, Platform } from "@/lib/types/database"
 
 interface ResearchWithDetails extends Research {
   platforms: { name: string }
+  content_pillars: { name: string } | null
 }
 
 export default function ResearchPage() {
@@ -19,9 +23,10 @@ export default function ResearchPage() {
   const [user, setUser] = useState<any>(null)
   const [workspaceId, setWorkspaceId] = useState<string>("")
   const [research, setResearch] = useState<ResearchWithDetails[]>([])
-  const [platforms, setPlatforms] = useState<Platform[]>([])
+  const [workspacePlatforms, setWorkspacePlatforms] = useState<Platform[]>([])
+  const [contentPillars, setContentPillars] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [selectedResearch, setSelectedResearch] = useState<ResearchWithDetails | null>(null)
+  const [openPopoverId, setOpenPopoverId] = useState<string | null>(null)
 
   useEffect(() => {
     loadData()
@@ -50,9 +55,57 @@ export default function ResearchPage() {
 
     setWorkspaceId(membership.workspace_id)
 
-    // Load platforms
-    const { data: platformsData } = await supabase.from("platforms").select("*").order("name")
-    if (platformsData) setPlatforms(platformsData)
+    const { data: creatorsData } = await supabase
+      .from("creators")
+      .select("id")
+      .eq("workspace_id", membership.workspace_id)
+
+    const creatorIds = creatorsData?.map((c) => c.id) || []
+
+    if (creatorIds.length > 0) {
+      const { data: workspacePlatformsData } = await supabase
+        .from("creator_platforms")
+        .select(`
+          platform_id,
+          platforms (*)
+        `)
+        .in("creator_id", creatorIds)
+
+      if (workspacePlatformsData && workspacePlatformsData.length > 0) {
+        // Extract unique platforms
+        const uniquePlatforms = Array.from(
+          new Map(
+            workspacePlatformsData
+              .map((cp: any) => cp.platforms)
+              .filter((p: any) => p !== null)
+              .map((p: Platform) => [p.id, p]),
+          ).values(),
+        ) as Platform[]
+        setWorkspacePlatforms(uniquePlatforms)
+      }
+    }
+
+    const { data: pillarsData, error: pillarsError } = await supabase
+      .from("content_pillars")
+      .select(`
+        *,
+        content_styles_reference(
+          id,
+          style_name,
+          style_value,
+          description
+        )
+      `)
+      .order("name")
+
+    console.log("[v0] Content pillars query result:", { data: pillarsData, error: pillarsError })
+    if (pillarsData) {
+      const pillarsWithStyles = pillarsData.map((pillar: any) => ({
+        ...pillar,
+        styles: pillar.content_styles_reference || [],
+      }))
+      setContentPillars(pillarsWithStyles)
+    }
 
     await loadResearch(membership.workspace_id)
   }
@@ -61,12 +114,53 @@ export default function ResearchPage() {
     setIsLoading(true)
     const { data } = await supabase
       .from("research")
-      .select("*, platforms(name)")
+      .select("*, platforms(name), content_pillars(name)")
       .eq("workspace_id", workspaceId)
       .order("created_at", { ascending: false })
 
     if (data) setResearch(data as ResearchWithDetails[])
     setIsLoading(false)
+  }
+
+  const getViralityColor = (level: string) => {
+    switch (level) {
+      case "blockbuster":
+        return "bg-green-600 text-white" // >=10x - green
+      case "viral":
+        return "bg-lime-600 text-white" // 5-10x - lime/yellow-green
+      case "breakout":
+        return "bg-yellow-600 text-white" // 2-5x - yellow
+      case "steady":
+        return "bg-orange-600 text-white" // 1-2x - orange
+      case "dormant":
+        return "bg-red-600 text-white" // <1x - red
+      default:
+        return "bg-gray-200"
+    }
+  }
+
+  const formatViewsInMillions = (views: number | null) => {
+    if (!views) return "-"
+    const millions = views / 1000000
+    return `${millions.toFixed(1)}M`
+  }
+
+  const formatStyleName = (style: string) => {
+    return style
+      .split("_")
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(" ")
+  }
+
+  const getPlatformIcon = (platformName: string) => {
+    const name = platformName.toLowerCase()
+    if (name.includes("youtube")) return "/icons/youtube.svg"
+    if (name === "tiktok") return "/icons/tiktok.svg"
+    if (name === "instagram") return "/icons/instagram.svg"
+    if (name === "x" || name === "twitter") return "/icons/x.svg"
+    if (name === "linkedin") return "/icons/linkedin.svg"
+    if (name === "facebook") return "/icons/facebook.svg"
+    return null
   }
 
   return (
@@ -81,165 +175,150 @@ export default function ResearchPage() {
           </div>
           <CreateResearchDialog
             workspaceId={workspaceId}
-            platforms={platforms}
+            workspacePlatforms={workspacePlatforms}
+            contentPillars={contentPillars}
             onResearchCreated={() => loadResearch(workspaceId)}
           />
         </div>
 
-        <div className="grid gap-6 md:grid-cols-2">
-          {/* Research List */}
-          <div className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Research Library</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {isLoading ? (
-                    <p className="text-muted-foreground text-center py-8">Loading research...</p>
-                  ) : research.length > 0 ? (
-                    research.map((item) => (
-                      <div
-                        key={item.id}
-                        onClick={() => setSelectedResearch(item)}
-                        className={`p-3 border rounded-lg cursor-pointer hover:bg-accent transition-colors ${
-                          selectedResearch?.id === item.id ? "bg-accent" : ""
-                        }`}
-                      >
-                        <div className="flex items-start justify-between mb-2">
-                          <div className="flex-1">
-                            <p className="font-medium line-clamp-1">{item.hook || "Untitled Research"}</p>
-                            {item.creator_niche && (
-                              <p className="text-sm text-muted-foreground">{item.creator_niche}</p>
+        <div className="border rounded-lg overflow-hidden bg-white">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-accent hover:bg-accent">
+                <TableHead className="text-white w-24">Thumbnail</TableHead>
+                <TableHead className="text-white w-20 text-center">Platform</TableHead>
+                <TableHead className="text-white w-28">Creator</TableHead>
+                <TableHead className="text-white w-24">Views</TableHead>
+                <TableHead className="text-white w-28">Virality</TableHead>
+                <TableHead className="text-white w-32">Pillar</TableHead>
+                <TableHead className="text-white w-32">Style</TableHead>
+                <TableHead className="text-white">Hook</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                    Loading research...
+                  </TableCell>
+                </TableRow>
+              ) : research.length > 0 ? (
+                research.map((item) => {
+                  const platformIcon = getPlatformIcon(item.platforms.name)
+                  return (
+                    <Popover
+                      key={item.id}
+                      open={openPopoverId === item.id}
+                      onOpenChange={(open) => setOpenPopoverId(open ? item.id : null)}
+                    >
+                      <PopoverTrigger asChild>
+                        <TableRow className="hover:bg-accent/10 transition-colors cursor-pointer">
+                          <TableCell className="py-0">
+                            {item.thumbnail_url && item.link ? (
+                              <a
+                                href={item.link}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <img
+                                  src={item.thumbnail_url || "/placeholder.svg"}
+                                  alt="Video thumbnail"
+                                  className="w-20 h-auto object-cover"
+                                  style={{ aspectRatio: "3/4" }}
+                                />
+                              </a>
+                            ) : item.thumbnail_url ? (
+                              <img
+                                src={item.thumbnail_url || "/placeholder.svg"}
+                                alt="Video thumbnail"
+                                className="w-20 h-auto object-cover"
+                                style={{ aspectRatio: "3/4" }}
+                              />
+                            ) : (
+                              "-"
                             )}
-                          </div>
-                          <Badge variant="outline">{item.platforms.name}</Badge>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            {platformIcon ? (
+                              <div className="flex items-center justify-center">
+                                <img
+                                  src={platformIcon || "/placeholder.svg"}
+                                  alt={item.platforms.name}
+                                  className="size-8"
+                                />
+                              </div>
+                            ) : (
+                              <span className="text-xs">{item.platforms.name}</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="font-bold">
+                            {item.creator_username ? `@${item.creator_username}` : "-"}
+                          </TableCell>
+                          <TableCell>{formatViewsInMillions(item.views)}</TableCell>
+                          <TableCell>
+                            {item.virality_level && (
+                              <Badge className={getViralityColor(item.virality_level)}>{item.virality_level}</Badge>
+                            )}
+                          </TableCell>
+                          <TableCell>{item.content_pillars?.name || "-"}</TableCell>
+                          <TableCell>{item.content_style ? formatStyleName(item.content_style) : "-"}</TableCell>
+                          <TableCell className="max-w-md">
+                            {item.hook ? (
+                              <span>
+                                {item.hook_type && (
+                                  <>
+                                    <span className="font-bold capitalize">{item.hook_type}</span>
+                                    {": "}
+                                  </>
+                                )}
+                                <span className="truncate">{item.hook}</span>
+                              </span>
+                            ) : (
+                              "-"
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-2 bg-white" align="center">
+                        <div className="flex flex-col gap-1">
+                          <EditResearchDialog
+                            research={item}
+                            workspaceId={workspaceId}
+                            workspacePlatforms={workspacePlatforms}
+                            contentPillars={contentPillars}
+                            onResearchUpdated={() => {
+                              loadResearch(workspaceId)
+                              setOpenPopoverId(null)
+                            }}
+                          />
+                          <UpdateResearchMetricsDialog
+                            research={item}
+                            onMetricsUpdated={() => {
+                              loadResearch(workspaceId)
+                              setOpenPopoverId(null)
+                            }}
+                          />
                         </div>
-                        {item.link && (
-                          <a
-                            href={item.link}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-xs text-primary hover:underline"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            View Original
-                          </a>
-                        )}
-                      </div>
-                    ))
-                  ) : (
-                    <div className="text-center py-8">
-                      <p className="text-muted-foreground mb-4">No research yet. Start analyzing viral content!</p>
-                      <CreateResearchDialog
-                        workspaceId={workspaceId}
-                        platforms={platforms}
-                        onResearchCreated={() => loadResearch(workspaceId)}
-                      />
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Research Details */}
-          <div>
-            {selectedResearch ? (
-              <Card>
-                <CardHeader>
-                  <div className="flex items-start justify-between">
-                    <CardTitle>Research Details</CardTitle>
-                    <Badge variant="outline">{selectedResearch.platforms.name}</Badge>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {selectedResearch.link && (
-                    <div>
-                      <p className="text-sm font-medium mb-1">Link</p>
-                      <a
-                        href={selectedResearch.link}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-sm text-primary hover:underline"
-                      >
-                        {selectedResearch.link}
-                      </a>
-                    </div>
-                  )}
-
-                  {selectedResearch.creator_niche && (
-                    <div>
-                      <p className="text-sm font-medium mb-1">Creator/Niche</p>
-                      <p className="text-sm text-muted-foreground">{selectedResearch.creator_niche}</p>
-                    </div>
-                  )}
-
-                  {selectedResearch.hook && (
-                    <div>
-                      <p className="text-sm font-medium mb-1">Hook</p>
-                      <p className="text-sm">{selectedResearch.hook}</p>
-                    </div>
-                  )}
-
-                  {selectedResearch.script_breakdown && (
-                    <div>
-                      <p className="text-sm font-medium mb-1">Script Breakdown</p>
-                      <p className="text-sm whitespace-pre-wrap">{selectedResearch.script_breakdown}</p>
-                    </div>
-                  )}
-
-                  {selectedResearch.sound_design && (
-                    <div>
-                      <p className="text-sm font-medium mb-1">Sound Design</p>
-                      <p className="text-sm text-muted-foreground">{selectedResearch.sound_design}</p>
-                    </div>
-                  )}
-
-                  {selectedResearch.music && (
-                    <div>
-                      <p className="text-sm font-medium mb-1">Music</p>
-                      <p className="text-sm text-muted-foreground">{selectedResearch.music}</p>
-                    </div>
-                  )}
-
-                  {selectedResearch.cadence && (
-                    <div>
-                      <p className="text-sm font-medium mb-1">Cadence</p>
-                      <p className="text-sm text-muted-foreground">{selectedResearch.cadence}</p>
-                    </div>
-                  )}
-
-                  {selectedResearch.b_roll && (
-                    <div>
-                      <p className="text-sm font-medium mb-1">B-roll</p>
-                      <p className="text-sm text-muted-foreground">{selectedResearch.b_roll}</p>
-                    </div>
-                  )}
-
-                  {selectedResearch.style && (
-                    <div>
-                      <p className="text-sm font-medium mb-1">Style</p>
-                      <p className="text-sm text-muted-foreground">{selectedResearch.style}</p>
-                    </div>
-                  )}
-
-                  {selectedResearch.why_it_worked && (
-                    <div>
-                      <p className="text-sm font-medium mb-1">Why It Worked</p>
-                      <p className="text-sm">{selectedResearch.why_it_worked}</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            ) : (
-              <Card>
-                <CardContent className="py-12 text-center">
-                  <p className="text-muted-foreground">Select a research item to view details</p>
-                </CardContent>
-              </Card>
-            )}
-          </div>
+                      </PopoverContent>
+                    </Popover>
+                  )
+                })
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center py-8">
+                    <p className="text-muted-foreground mb-4">No research yet. Start analyzing viral content!</p>
+                    <CreateResearchDialog
+                      workspaceId={workspaceId}
+                      workspacePlatforms={workspacePlatforms}
+                      contentPillars={contentPillars}
+                      onResearchCreated={() => loadResearch(workspaceId)}
+                    />
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
         </div>
       </main>
     </div>

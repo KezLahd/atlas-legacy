@@ -172,3 +172,52 @@ export async function deleteWorkspace(workspaceId: string) {
     return { error: error.message || "Failed to delete workspace" }
   }
 }
+
+export async function upgradeWorkspaceType(workspaceId: string, newType: WorkspaceType) {
+  try {
+    const supabase = await createClient()
+    const serviceSupabase = createServiceClient()
+
+    // Check auth
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user) {
+      return { error: "Not authenticated" }
+    }
+
+    // Verify user is owner or admin
+    const { data: membership } = await supabase
+      .from("workspace_members")
+      .select("role")
+      .eq("workspace_id", workspaceId)
+      .eq("user_id", user.id)
+      .single()
+
+    if (!membership || (membership.role !== "owner" && membership.role !== "admin")) {
+      return { error: "Unauthorized - only owners and admins can upgrade workspace" }
+    }
+
+    console.log("[v0] Server action: Upgrading workspace", workspaceId, "to", newType)
+
+    // Update workspace type using service client to bypass RLS
+    const { error: workspaceError } = await serviceSupabase
+      .from("workspaces")
+      .update({ type: newType })
+      .eq("id", workspaceId)
+
+    if (workspaceError) {
+      console.error("[v0] Server action error:", workspaceError)
+      throw workspaceError
+    }
+
+    console.log("[v0] Server action: Workspace upgraded successfully")
+    revalidatePath("/profile/settings")
+    revalidatePath("/profile/team")
+    revalidatePath("/profile/creators")
+    return { success: true }
+  } catch (error: any) {
+    console.error("[v0] Workspace upgrade error:", error)
+    return { error: error.message || "Failed to upgrade workspace" }
+  }
+}

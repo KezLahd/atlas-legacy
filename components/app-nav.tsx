@@ -5,8 +5,22 @@ import { usePathname, useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { AtlasLogo } from "@/components/atlas-logo"
-import { LayoutDashboard, FileText, Search, BarChart3, LogOut, User } from "lucide-react"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import {
+  LayoutDashboard,
+  FileText,
+  Search,
+  BarChart3,
+  LogOut,
+  UserCircle,
+  Video,
+  UsersRound,
+  Settings,
+  Palette,
+} from "lucide-react"
 import { cn } from "@/lib/utils"
+import { UserAvatar } from "@/components/user-avatar"
+import { useEffect, useState } from "react"
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -19,6 +33,22 @@ export function AppNav({ userEmail }: { userEmail?: string }) {
   const pathname = usePathname()
   const router = useRouter()
   const supabase = createClient()
+  const [profile, setProfile] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    async function loadProfile() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (user) {
+        const { data } = await supabase.from("user_profiles").select("*").eq("id", user.id).single()
+        setProfile(data)
+      }
+      setLoading(false)
+    }
+    loadProfile()
+  }, [])
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
@@ -55,27 +85,67 @@ export function AppNav({ userEmail }: { userEmail?: string }) {
           })}
         </nav>
 
-        <Link
-          href="/profile"
-          className={cn(
-            "flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors",
-            pathname.startsWith("/profile")
-              ? "bg-primary text-primary-foreground"
-              : "text-muted-foreground hover:bg-accent hover:text-foreground",
-          )}
-        >
-          <User className="size-4" />
-          <span className="hidden md:inline">Profile</span>
-        </Link>
-
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={handleLogout}
-          className="text-muted-foreground hover:bg-accent hover:text-foreground"
-        >
-          <LogOut className="size-4" />
-        </Button>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              variant="ghost"
+              className={cn(
+                "flex items-center gap-2 px-3 py-2",
+                pathname.startsWith("/profile") ? "bg-[#3a2415] text-white hover:bg-[#3a2415]/90" : "",
+              )}
+            >
+              {!loading && profile ? <UserAvatar profile={profile} size="sm" /> : <UserCircle className="size-5" />}
+              <span className="hidden md:inline text-sm">Profile</span>
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-56 p-2" align="end">
+            <div className="space-y-1">
+              <Link
+                href="/profile/account"
+                className="flex items-center gap-3 px-3 py-2 rounded-md text-sm hover:bg-accent transition-colors"
+              >
+                <UserCircle className="size-4" />
+                <span>Account</span>
+              </Link>
+              <Link
+                href="/profile/appearance"
+                className="flex items-center gap-3 px-3 py-2 rounded-md text-sm hover:bg-accent transition-colors"
+              >
+                <Palette className="size-4" />
+                <span>Appearance</span>
+              </Link>
+              <Link
+                href="/profile/creators"
+                className="flex items-center gap-3 px-3 py-2 rounded-md text-sm hover:bg-accent transition-colors"
+              >
+                <Video className="size-4" />
+                <span>Creators</span>
+              </Link>
+              <Link
+                href="/profile/team"
+                className="flex items-center gap-3 px-3 py-2 rounded-md text-sm hover:bg-accent transition-colors"
+              >
+                <UsersRound className="size-4" />
+                <span>Team</span>
+              </Link>
+              <Link
+                href="/profile/settings"
+                className="flex items-center gap-3 px-3 py-2 rounded-md text-sm hover:bg-accent transition-colors"
+              >
+                <Settings className="size-4" />
+                <span>Workspace Settings</span>
+              </Link>
+              <div className="border-t my-1" />
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-3 px-3 py-2 rounded-md text-sm hover:bg-accent transition-colors w-full text-left text-red-600"
+              >
+                <LogOut className="size-4" />
+                <span>Logout</span>
+              </button>
+            </div>
+          </PopoverContent>
+        </Popover>
       </div>
     </div>
   )

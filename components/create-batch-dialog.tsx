@@ -82,12 +82,12 @@ export function CreateBatchDialog({ workspaceId, creators, onBatchCreated }: Cre
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button>
+        <Button variant="secondary">
           <Plus className="size-4 mr-2" />
           Create Batch
         </Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className="bg-white">
         <DialogHeader>
           <DialogTitle>Create New Batch</DialogTitle>
         </DialogHeader>
