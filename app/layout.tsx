@@ -13,7 +13,6 @@ export const metadata: Metadata = {
   title: "Atlas - Carry the weight of your brand",
   description:
     "Creator-first content operating system for planning, producing, batching, and analyzing personal brand content.",
-  generator: "v0.app",
   icons: {
     icon: [
       {
