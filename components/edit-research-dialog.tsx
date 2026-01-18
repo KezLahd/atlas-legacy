@@ -193,6 +193,10 @@ export function EditResearchDialog({
     e.preventDefault()
     setIsSubmitting(true)
 
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
     let finalThumbnailUrl = thumbnailUrl
     if (thumbnailFile) {
       const fileExt = thumbnailFile.name.split(".").pop()
@@ -216,6 +220,33 @@ export function EditResearchDialog({
       formattedDate = `${year}-${month}-${day}`
     }
 
+    // Track changes for audit log
+    const changes: Array<{ field: string; oldValue: any; newValue: any }> = []
+
+    const compareAndTrack = (field: string, oldVal: any, newVal: any) => {
+      const oldStr = oldVal?.toString() || ""
+      const newStr = newVal?.toString() || ""
+      if (oldStr !== newStr) {
+        changes.push({ field, oldValue: oldStr, newValue: newStr })
+      }
+    }
+
+    // Compare all fields
+    compareAndTrack("platform_id", research.platform_id, platformId)
+    compareAndTrack("creator_username", research.creator_username, creatorUsername)
+    compareAndTrack("format", research.format, format)
+    compareAndTrack("thumbnail_url", research.thumbnail_url, finalThumbnailUrl)
+    compareAndTrack("link", research.link, link)
+    compareAndTrack("posting_date", research.posting_date, formattedDate)
+    compareAndTrack("hook_type", research.hook_type, hookType)
+    compareAndTrack("hook", research.hook, hook)
+    compareAndTrack("has_sfx", research.has_sfx, hasSfx)
+    compareAndTrack("has_broll", research.has_broll, hasBroll)
+    compareAndTrack("has_music", research.has_music, hasMusic)
+    compareAndTrack("avg_seconds_per_clip", research.avg_seconds_per_clip, avgSecondsPerClip ? Number.parseFloat(avgSecondsPerClip) : null)
+    compareAndTrack("content_pillar_id", research.content_pillar_id, contentPillarId)
+    compareAndTrack("content_style", research.content_style, contentStyle)
+
     const { error } = await supabase
       .from("research")
       .update({
@@ -233,13 +264,28 @@ export function EditResearchDialog({
         avg_seconds_per_clip: avgSecondsPerClip ? Number.parseFloat(avgSecondsPerClip) : null,
         content_pillar_id: contentPillarId || null,
         content_style: contentStyle || null,
+        updated_by: user?.id || null,
         updated_at: new Date().toISOString(),
       })
       .eq("id", research.id)
 
     setIsSubmitting(false)
 
-    if (!error) {
+    if (!error && user?.id) {
+      // Log each change to audit trail
+      if (changes.length > 0) {
+        const auditLogEntries = changes.map((change) => ({
+          research_id: research.id,
+          user_id: user.id,
+          action: "updated",
+          field_changed: change.field,
+          old_value: change.oldValue,
+          new_value: change.newValue,
+        }))
+
+        await supabase.from("research_audit_log").insert(auditLogEntries)
+      }
+
       setOpen(false)
       onResearchUpdated()
     }
@@ -529,7 +575,7 @@ export function EditResearchDialog({
                 </Button>
                 <Button
                   type="submit"
-                  className="bg-accent hover:bg-accent/90 text-primary"
+                  className="bg-accent hover:bg-accent/90 text-black"
                   disabled={isSubmitting || !hasChanges}
                 >
                   {isSubmitting ? "Saving..." : "Save Changes"}

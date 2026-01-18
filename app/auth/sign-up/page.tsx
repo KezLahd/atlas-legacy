@@ -5,6 +5,7 @@ import type React from "react"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { AtlasLogo } from "@/components/atlas-logo"
@@ -12,17 +13,21 @@ import { ChevronLeft } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
+import { useToast } from "@/hooks/use-toast"
 
 export default function SignUpPage() {
-  const [step, setStep] = useState<1 | 2>(1)
+  const [step, setStep] = useState<1 | 2 | 3>(1)
   const [firstName, setFirstName] = useState("")
   const [lastName, setLastName] = useState("")
   const [email, setEmail] = useState("")
+  const [verificationCode, setVerificationCode] = useState("")
   const [password, setPassword] = useState("")
   const [repeatPassword, setRepeatPassword] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [showSuccessDialog, setShowSuccessDialog] = useState(false)
   const router = useRouter()
+  const { toast } = useToast()
 
   const handleContinue = (e: React.FormEvent) => {
     e.preventDefault()
@@ -33,7 +38,82 @@ export default function SignUpPage() {
       return
     }
 
-    setStep(2)
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(email)) {
+      setError("Please enter a valid email address")
+      return
+    }
+
+    setStep(2) // Go to early access code step
+  }
+
+  const handleRequestAccess = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError(null)
+
+    if (!email) {
+      setError("Please enter your email address first")
+      return
+    }
+
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(email)) {
+      setError("Please enter a valid email address")
+      return
+    }
+
+    setIsLoading(true)
+
+    try {
+      const supabase = createClient()
+      const { error } = await supabase
+        .from("access_requests")
+        .insert({
+          email: email.toLowerCase(),
+          first_name: firstName,
+          last_name: lastName,
+        })
+
+      if (error) {
+        if (error.code === '23505') { // Unique constraint violation
+          setError("An access request has already been submitted for this email address")
+        } else {
+          throw error
+        }
+        return
+      }
+
+      setError(null)
+      toast({
+        title: "Access Request Submitted",
+        description: "We'll review your request and get back to you soon.",
+        variant: "success",
+      })
+    } catch (error: unknown) {
+      setError(error instanceof Error ? error.message : "Failed to submit access request")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleVerifyCode = (e: React.FormEvent) => {
+    e.preventDefault()
+    setError(null)
+
+    if (!verificationCode) {
+      setError("Please enter your early access code")
+      return
+    }
+
+    // Check against environment variable
+    if (verificationCode.trim() !== process.env.NEXT_PUBLIC_VERIFICATION_CODE) {
+      setError("Invalid early access code")
+      return
+    }
+
+    setShowSuccessDialog(true)
   }
 
   const handleSignUp = async (e: React.FormEvent) => {
@@ -101,24 +181,38 @@ export default function SignUpPage() {
           </Link>
           <Card>
             <CardHeader className="relative">
-              {step === 2 && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="absolute left-4 top-4"
-                  onClick={() => setStep(1)}
-                  disabled={isLoading}
-                >
-                  <ChevronLeft className="size-5" />
-                  <span className="sr-only">Back</span>
-                </Button>
-              )}
-              <CardTitle className={`text-2xl ${step === 2 ? "text-center" : ""}`}>
-                {step === 1 ? "Create your account" : "Set your password"}
+              <CardTitle className="text-2xl flex items-center justify-center">
+                {step === 2 && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="mr-2"
+                    onClick={() => setStep((step - 1) as 1 | 2 | 3)}
+                    disabled={isLoading}
+                  >
+                    <ChevronLeft className="size-5" />
+                    <span className="sr-only">Back</span>
+                  </Button>
+                )}
+                {step === 1 ? "Create your account" : step === 2 ? "Verify your access" : "Set your password"}
+                {step === 3 && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="ml-auto"
+                    onClick={() => setStep((step - 1) as 1 | 2 | 3)}
+                    disabled={isLoading}
+                  >
+                    <ChevronLeft className="size-5" />
+                    <span className="sr-only">Back</span>
+                  </Button>
+                )}
               </CardTitle>
-              <CardDescription className={step === 2 ? "text-center" : ""}>
+              <CardDescription className={step === 3 ? "text-center" : ""}>
                 {step === 1
                   ? "Start organizing your content empire today"
+                  : step === 2
+                  ? "Enter your early access code"
                   : "Choose a secure password for your account"}
               </CardDescription>
             </CardHeader>
@@ -213,15 +307,53 @@ export default function SignUpPage() {
                       />
                     </div>
                     {error && <p className="text-sm text-destructive">{error}</p>}
-                    <Button type="submit" className="w-full">
-                      Create Account
-                    </Button>
+                    <div className="grid gap-2">
+                      <Button type="submit" className="w-full">
+                        Next
+                      </Button>
+                    </div>
                   </div>
                   <div className="mt-4 text-center text-sm">
                     Already have an account?{" "}
                     <Link href="/auth/login" className="underline underline-offset-4">
                       Login
                     </Link>
+                  </div>
+                </form>
+              ) : step === 2 ? (
+                <form onSubmit={handleVerifyCode}>
+                  <div className="flex flex-col gap-6">
+                    <div className="rounded-lg bg-muted p-4">
+                      <p className="text-sm text-muted-foreground">
+                        Early access code required. Contact Kez if you don't have one.
+                      </p>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="verificationCode">Early Access Code</Label>
+                      <Input
+                        id="verificationCode"
+                        type="text"
+                        placeholder="Enter early access code"
+                        required
+                        value={verificationCode}
+                        onChange={(e) => setVerificationCode(e.target.value)}
+                      />
+                    </div>
+                    {error && <p className="text-sm text-destructive">{error}</p>}
+                    <div className="grid gap-2">
+                      <Button type="submit" className="w-full" disabled={isLoading}>
+                        Verify Code
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full"
+                        onClick={handleRequestAccess}
+                        disabled={isLoading}
+                      >
+                        Request Access
+                      </Button>
+                    </div>
                   </div>
                 </form>
               ) : (
@@ -267,6 +399,36 @@ export default function SignUpPage() {
           </Card>
         </div>
       </div>
+
+      {/* Success Dialog */}
+      <Dialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-green-600">Access Granted! 🎉</DialogTitle>
+            <DialogDescription className="text-base">
+              You must know Kez personally to have this early access code.
+              <br />
+              <br />
+              As one of the first users, we'd love your feedback when you test Atlas.
+              How much would you be willing to pay monthly for a tool like this?
+              <br />
+              <br />
+              <strong>DM me at @kieranjxn so I can hear your feedback!</strong>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              onClick={() => {
+                setShowSuccessDialog(false)
+                setStep(3)
+              }}
+              className="w-full"
+            >
+              Continue to Sign Up
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -58,6 +58,10 @@ export function UpdateResearchMetricsDialog({ research, onMetricsUpdated }: Upda
     e.preventDefault()
     setIsSubmitting(true)
 
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
     const viewsValue =
       Number.parseFloat(views) * (viewsMultiplier === "M" ? 1000000 : viewsMultiplier === "K" ? 1000 : 1)
     const likesValue =
@@ -67,32 +71,81 @@ export function UpdateResearchMetricsDialog({ research, onMetricsUpdated }: Upda
 
     const viralityLevel = calculateViralityLevel(viewsValue, followersValue)
 
-    // Store old metrics in trends table before updating
-    const { error: trendsError } = await supabase.from("research_trends").insert({
-      research_id: research.id,
-      views: research.views || 0,
-      likes: research.likes || 0,
-      followers: research.followers || 0,
-      recorded_at: new Date().toISOString(),
-    })
+    try {
+      // Track changes for audit log
+      const changes: Array<{ field: string; oldValue: any; newValue: any }> = []
 
-    // Update research with new metrics
-    const { error: updateError } = await supabase
-      .from("research")
-      .update({
+      const compareAndTrack = (field: string, oldVal: any, newVal: any) => {
+        const oldStr = oldVal?.toString() || ""
+        const newStr = newVal?.toString() || ""
+        if (oldStr !== newStr) {
+          changes.push({ field, oldValue: oldStr, newValue: newStr })
+        }
+      }
+
+      compareAndTrack("views", research.views, viewsValue)
+      compareAndTrack("likes", research.likes, likesValue)
+      compareAndTrack("followers", research.followers, followersValue)
+      compareAndTrack("virality_level", research.virality_level, viralityLevel)
+
+      // Update research with new metrics first
+      const { error: updateError } = await supabase
+        .from("research")
+        .update({
+          views: viewsValue,
+          likes: likesValue,
+          followers: followersValue,
+          virality_level: viralityLevel,
+          updated_by: user?.id || null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", research.id)
+
+      if (updateError) {
+        console.error("Error updating research:", updateError)
+        alert(`Failed to update research: ${updateError.message}`)
+        setIsSubmitting(false)
+        return
+      }
+
+      // Store the NEW metrics in trends table as historical record
+      const { error: trendsError } = await supabase.from("research_trends").insert({
+        research_id: research.id,
         views: viewsValue,
         likes: likesValue,
         followers: followersValue,
-        virality_level: viralityLevel,
-        updated_at: new Date().toISOString(),
+        recorded_at: new Date().toISOString(),
       })
-      .eq("id", research.id)
 
-    setIsSubmitting(false)
+      if (trendsError) {
+        console.error("Error inserting into research_trends:", trendsError)
+        alert(`Failed to save trend data: ${trendsError.message}`)
+        setIsSubmitting(false)
+        return
+      }
 
-    if (!updateError && !trendsError) {
+      // Log metrics update to audit trail
+      if (changes.length > 0 && user?.id) {
+        const auditLogEntries = changes.map((change) => ({
+          research_id: research.id,
+          user_id: user.id,
+          action: "metrics_updated",
+          field_changed: change.field,
+          old_value: change.oldValue,
+          new_value: change.newValue,
+        }))
+
+        await supabase.from("research_audit_log").insert(auditLogEntries)
+      }
+
+      console.log("[v0] Metrics updated successfully, calling onMetricsUpdated")
       setOpen(false)
       onMetricsUpdated()
+    } catch (error) {
+      console.error("Unexpected error:", error)
+      alert("An unexpected error occurred")
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -194,7 +247,7 @@ export function UpdateResearchMetricsDialog({ research, onMetricsUpdated }: Upda
               <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                 Cancel
               </Button>
-              <Button type="submit" className="bg-accent hover:bg-accent/90" disabled={isSubmitting}>
+              <Button type="submit" className="bg-accent hover:bg-accent/90 text-black" disabled={isSubmitting}>
                 {isSubmitting ? "Updating..." : "Update Metrics"}
               </Button>
             </div>

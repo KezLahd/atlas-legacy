@@ -38,8 +38,8 @@ export async function updateWorkspace(data: {
       .eq("user_id", user.id)
       .single()
 
-    if (!membership || (membership.role !== "owner" && membership.role !== "admin")) {
-      return { error: "Unauthorized - only owners and admins can edit workspace" }
+    if (!membership || membership.role !== "owner") {
+      return { error: "Unauthorized - only owners can edit workspace" }
     }
 
     // Update workspace
@@ -194,8 +194,8 @@ export async function upgradeWorkspaceType(workspaceId: string, newType: Workspa
       .eq("user_id", user.id)
       .single()
 
-    if (!membership || (membership.role !== "owner" && membership.role !== "admin")) {
-      return { error: "Unauthorized - only owners and admins can upgrade workspace" }
+    if (!membership || membership.role !== "owner") {
+      return { error: "Unauthorized - only owners can upgrade workspace" }
     }
 
     console.log("[v0] Server action: Upgrading workspace", workspaceId, "to", newType)

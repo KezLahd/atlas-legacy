@@ -61,6 +61,11 @@ export default function ScriptingContent() {
   const [scenes, setScenes] = useState<ScriptScene[]>([])
   const [bRoll, setBRoll] = useState("")
   const [cta, setCta] = useState("")
+  
+  // Original values for audit trail
+  const [originalScenes, setOriginalScenes] = useState<ScriptScene[]>([])
+  const [originalHook, setOriginalHook] = useState("")
+  const [originalCta, setOriginalCta] = useState("")
 
   const [availableBRoll, setAvailableBRoll] = useState<Array<{ id: string; name: string }>>([])
   const [selectedBRoll, setSelectedBRoll] = useState<string[]>([])
@@ -169,11 +174,16 @@ export default function ScriptingContent() {
 
       if (scenesData && scenesData.length > 0) {
         setScenes(scenesData)
+        setOriginalScenes(scenesData) // Store original scenes for audit trail
       } else {
         // Initialize with one empty scene
-        setScenes([{ id: "", scene_number: 1, audio_script: "", visuals: "" }])
+        const emptyScene = [{ id: "", scene_number: 1, audio_script: "", visuals: "" }]
+        setScenes(emptyScene)
+        setOriginalScenes(emptyScene) // Store original scenes for audit trail
       }
       setCta(data.cta || "")
+      setOriginalCta(data.cta || "") // Store original cta for audit trail
+      setOriginalHook(data.hook || "") // Store original hook for audit trail
       setIsEditing(data.production_stage === "idea")
     }
   }
@@ -199,9 +209,133 @@ export default function ScriptingContent() {
   }
 
   const handleSave = async () => {
-    if (!selectedContentId) return
+    if (!selectedContentId || !user) return
 
     setIsSaving(true)
+
+    // Track changes for audit log
+    const auditLogEntries: any[] = []
+    const oldSceneCount = originalScenes.length
+    const newSceneCount = scenes.length
+
+    // Log overall save action with scene count change
+    if (oldSceneCount !== newSceneCount) {
+      auditLogEntries.push({
+        content_id: selectedContentId,
+        user_id: user.id,
+        action: "saved",
+        scene_number: null,
+        field_changed: "scenes_count",
+        old_value: oldSceneCount.toString(),
+        new_value: newSceneCount.toString(),
+        old_scene_count: oldSceneCount,
+        new_scene_count: newSceneCount,
+      })
+    } else {
+      auditLogEntries.push({
+        content_id: selectedContentId,
+        user_id: user.id,
+        action: "saved",
+        scene_number: null,
+        field_changed: null,
+        old_value: null,
+        new_value: null,
+        old_scene_count: oldSceneCount,
+        new_scene_count: newSceneCount,
+      })
+    }
+
+    // Log hook changes
+    if (hook !== originalHook) {
+      auditLogEntries.push({
+        content_id: selectedContentId,
+        user_id: user.id,
+        action: "saved",
+        scene_number: null,
+        field_changed: "hook",
+        old_value: originalHook || "",
+        new_value: hook || "",
+        old_scene_count: oldSceneCount,
+        new_scene_count: newSceneCount,
+      })
+    }
+
+    // Log cta changes
+    if (cta !== originalCta) {
+      auditLogEntries.push({
+        content_id: selectedContentId,
+        user_id: user.id,
+        action: "saved",
+        scene_number: null,
+        field_changed: "cta",
+        old_value: originalCta || "",
+        new_value: cta || "",
+        old_scene_count: oldSceneCount,
+        new_scene_count: newSceneCount,
+      })
+    }
+
+    // Track scene content changes (compare scenes by scene_number)
+    for (let i = 0; i < Math.max(oldSceneCount, newSceneCount); i++) {
+      const oldScene = originalScenes.find((s) => s.scene_number === i + 1)
+      const newScene = scenes.find((s) => s.scene_number === i + 1)
+
+      if (!oldScene && newScene) {
+        // Scene was added
+        auditLogEntries.push({
+          content_id: selectedContentId,
+          user_id: user.id,
+          action: "saved",
+          scene_number: newScene.scene_number,
+          field_changed: "scene_added",
+          old_value: null,
+          new_value: `Scene ${newScene.scene_number}`,
+          old_scene_count: oldSceneCount,
+          new_scene_count: newSceneCount,
+        })
+      } else if (oldScene && !newScene) {
+        // Scene was deleted
+        auditLogEntries.push({
+          content_id: selectedContentId,
+          user_id: user.id,
+          action: "saved",
+          scene_number: oldScene.scene_number,
+          field_changed: "scene_deleted",
+          old_value: `Scene ${oldScene.scene_number}`,
+          new_value: null,
+          old_scene_count: oldSceneCount,
+          new_scene_count: newSceneCount,
+        })
+      } else if (oldScene && newScene) {
+        // Check if scene content changed
+        if (oldScene.audio_script !== newScene.audio_script) {
+          auditLogEntries.push({
+            content_id: selectedContentId,
+            user_id: user.id,
+            action: "saved",
+            scene_number: newScene.scene_number,
+            field_changed: "audio_script",
+            old_value: oldScene.audio_script || "",
+            new_value: newScene.audio_script || "",
+            old_scene_count: oldSceneCount,
+            new_scene_count: newSceneCount,
+          })
+        }
+        if (oldScene.visuals !== newScene.visuals) {
+          auditLogEntries.push({
+            content_id: selectedContentId,
+            user_id: user.id,
+            action: "saved",
+            scene_number: newScene.scene_number,
+            field_changed: "visuals",
+            old_value: oldScene.visuals || "",
+            new_value: newScene.visuals || "",
+            old_scene_count: oldSceneCount,
+            new_scene_count: newSceneCount,
+          })
+        }
+      }
+    }
 
     // Save basic fields
     const result = await updateContentScript(selectedContentId, {
@@ -235,14 +369,129 @@ export default function ScriptingContent() {
       alert("Failed to save scenes. Please try again.")
     }
 
+    // Log all changes to audit trail
+    if (auditLogEntries.length > 0) {
+      await supabase.from("script_audit_log").insert(auditLogEntries)
+    }
+
     setIsSaving(false)
     await loadContentDetails(selectedContentId)
   }
 
   const handleFinalise = async () => {
-    if (!selectedContentId) return
+    if (!selectedContentId || !user) return
 
     setIsSaving(true)
+
+    // Track changes for audit log
+    const auditLogEntries: any[] = []
+    const oldSceneCount = originalScenes.length
+    const newSceneCount = scenes.length
+
+    // Log finalise action with scene count change
+    auditLogEntries.push({
+      content_id: selectedContentId,
+      user_id: user.id,
+      action: "finalised",
+      scene_number: null,
+      field_changed: oldSceneCount !== newSceneCount ? "scenes_count" : null,
+      old_value: oldSceneCount !== newSceneCount ? oldSceneCount.toString() : null,
+      new_value: oldSceneCount !== newSceneCount ? newSceneCount.toString() : null,
+      old_scene_count: oldSceneCount,
+      new_scene_count: newSceneCount,
+    })
+
+    // Log hook changes
+    if (hook !== originalHook) {
+      auditLogEntries.push({
+        content_id: selectedContentId,
+        user_id: user.id,
+        action: "finalised",
+        scene_number: null,
+        field_changed: "hook",
+        old_value: originalHook || "",
+        new_value: hook || "",
+        old_scene_count: oldSceneCount,
+        new_scene_count: newSceneCount,
+      })
+    }
+
+    // Log cta changes
+    if (cta !== originalCta) {
+      auditLogEntries.push({
+        content_id: selectedContentId,
+        user_id: user.id,
+        action: "finalised",
+        scene_number: null,
+        field_changed: "cta",
+        old_value: originalCta || "",
+        new_value: cta || "",
+        old_scene_count: oldSceneCount,
+        new_scene_count: newSceneCount,
+      })
+    }
+
+    // Track scene content changes (compare scenes by scene_number)
+    for (let i = 0; i < Math.max(oldSceneCount, newSceneCount); i++) {
+      const oldScene = originalScenes.find((s) => s.scene_number === i + 1)
+      const newScene = scenes.find((s) => s.scene_number === i + 1)
+
+      if (!oldScene && newScene) {
+        // Scene was added
+        auditLogEntries.push({
+          content_id: selectedContentId,
+          user_id: user.id,
+          action: "finalised",
+          scene_number: newScene.scene_number,
+          field_changed: "scene_added",
+          old_value: null,
+          new_value: `Scene ${newScene.scene_number}`,
+          old_scene_count: oldSceneCount,
+          new_scene_count: newSceneCount,
+        })
+      } else if (oldScene && !newScene) {
+        // Scene was deleted
+        auditLogEntries.push({
+          content_id: selectedContentId,
+          user_id: user.id,
+          action: "finalised",
+          scene_number: oldScene.scene_number,
+          field_changed: "scene_deleted",
+          old_value: `Scene ${oldScene.scene_number}`,
+          new_value: null,
+          old_scene_count: oldSceneCount,
+          new_scene_count: newSceneCount,
+        })
+      } else if (oldScene && newScene) {
+        // Check if scene content changed
+        if (oldScene.audio_script !== newScene.audio_script) {
+          auditLogEntries.push({
+            content_id: selectedContentId,
+            user_id: user.id,
+            action: "finalised",
+            scene_number: newScene.scene_number,
+            field_changed: "audio_script",
+            old_value: oldScene.audio_script || "",
+            new_value: newScene.audio_script || "",
+            old_scene_count: oldSceneCount,
+            new_scene_count: newSceneCount,
+          })
+        }
+        if (oldScene.visuals !== newScene.visuals) {
+          auditLogEntries.push({
+            content_id: selectedContentId,
+            user_id: user.id,
+            action: "finalised",
+            scene_number: newScene.scene_number,
+            field_changed: "visuals",
+            old_value: oldScene.visuals || "",
+            new_value: newScene.visuals || "",
+            old_scene_count: oldSceneCount,
+            new_scene_count: newSceneCount,
+          })
+        }
+      }
+    }
 
     // Save basic fields
     const result = await updateContentScript(selectedContentId, {
@@ -272,6 +521,11 @@ export default function ScriptingContent() {
     if (scenesError) {
       console.error("[v0] Error saving scenes:", scenesError)
       alert("Failed to save scenes. Please try again.")
+    }
+
+    // Log all changes to audit trail
+    if (auditLogEntries.length > 0) {
+      await supabase.from("script_audit_log").insert(auditLogEntries)
     }
 
     setIsSaving(false)

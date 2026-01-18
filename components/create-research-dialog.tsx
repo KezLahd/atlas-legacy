@@ -157,7 +157,18 @@ export function CreateResearchDialog({
       const viralityLevel = viewsValue && followersValue ? calculateViralityLevel(viewsValue, followersValue) : null
       console.log("[v0] Virality level:", viralityLevel)
 
-      const { error } = await supabase.from("research").insert({
+      // Construct production elements string
+      const productionElements = []
+      if (hasSfx) productionElements.push("SFX")
+      if (hasBroll) productionElements.push("B-Roll")
+      if (hasMusic) productionElements.push("Music")
+      const productionElementsString = productionElements.length > 0 ? productionElements.join(", ") : null
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      const { data: researchData, error } = await supabase.from("research").insert({
         workspace_id: membership.workspace_id,
         platform_id: platformId,
         creator_username: creatorUsername,
@@ -172,16 +183,45 @@ export function CreateResearchDialog({
         likes: likesValue,
         followers: followersValue,
         virality_level: viralityLevel,
-        has_sfx: hasSfx,
-        has_broll: hasBroll,
-        has_music: hasMusic,
-        avg_seconds_per_clip: avgSecondsPerClip ? Number.parseFloat(avgSecondsPerClip) : null,
+        production_elements: productionElementsString,
+        average_clip_seconds: avgSecondsPerClip ? Number.parseFloat(avgSecondsPerClip) : null,
         content_pillar_id: contentPillarId || null,
         content_style: contentStyle || null,
-        format: format || null,
-      })
+        created_by: user?.id || null,
+        updated_by: user?.id || null,
+      }).select().single()
 
       if (error) throw error
+
+      // Log creation to audit trail
+      if (researchData && researchData.id && user?.id) {
+        await supabase.from("research_audit_log").insert({
+          research_id: researchData.id,
+          user_id: user.id,
+          action: "created",
+          field_changed: null,
+          old_value: null,
+          new_value: null,
+        })
+      }
+
+      // Create initial entry in research_trends for growth tracking
+      // Use the current timestamp, not the posting date
+      if (researchData && researchData.id) {
+        const { error: trendsError } = await supabase.from("research_trends").insert({
+          research_id: researchData.id,
+          views: viewsValue || 0,
+          likes: likesValue || 0,
+          followers: followersValue || 0,
+          recorded_at: new Date().toISOString(), // Use current time, not posting date
+        })
+
+        if (trendsError) {
+          console.error("Error creating initial research_trends entry:", trendsError)
+          alert(`Research created but trend tracking failed: ${trendsError.message}`)
+          // Don't throw here - research was created successfully
+        }
+      }
 
       resetForm()
       setOpen(false)

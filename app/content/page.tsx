@@ -15,7 +15,7 @@ import { CreateContentDialog } from "@/components/create-content-dialog"
 import { CreateEventDialog } from "@/components/create-event-dialog"
 import { Footer } from "@/components/footer"
 import { EditContentDialog } from "@/components/edit-content-dialog"
-import type { Content, Creator, ProductionStage, Batch } from "@/lib/types/database"
+import type { Content, Creator, ProductionStage, Batch, Platform } from "@/lib/types/database"
 import { CreateBatchDialog } from "@/components/create-batch-dialog"
 import { EditBatchDialog } from "@/components/edit-batch-dialog"
 import React from "react"
@@ -52,16 +52,18 @@ export default function ContentPage() {
   const [content, setContent] = useState<ContentWithDetails[]>([])
   const [creators, setCreators] = useState<Creator[]>([])
   const [batches, setBatches] = useState<Batch[]>([])
+  const [workspacePlatforms, setWorkspacePlatforms] = useState<Platform[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [workspaceType, setWorkspaceType] = useState<string>("")
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
   const [showScheduleDialog, setShowScheduleDialog] = useState<boolean>(false)
   const [schedulingContentId, setSchedulingContentId] = useState<string>("")
+  const [schedulingBatchId, setSchedulingBatchId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState<string>("")
   const [selectedBatch, setSelectedBatch] = useState<string>("all")
   const [selectedCreator, setSelectedCreator] = useState<string>("all")
   const [selectedStage, setSelectedStage] = useState<string>("all")
-  const [selectedFormat, setSelectedFormat] = useState<string>("all")
+  const [selectedPlatform, setSelectedPlatform] = useState<string>("all")
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([])
 
   useEffect(() => {
@@ -112,6 +114,30 @@ export default function ContentPage() {
 
     if (creatorsRes.data) setCreators(creatorsRes.data)
     if (batchesRes.data) setBatches(batchesRes.data)
+
+    // Load platforms from workspace (similar to research page)
+    if (creatorsRes.data && creatorsRes.data.length > 0) {
+      const { data: workspacePlatformsData } = await supabase
+        .from("creator_platforms")
+        .select(`
+          platform_id,
+          platforms (*)
+        `)
+        .in("creator_id", creatorsRes.data.map((c) => c.id))
+
+      if (workspacePlatformsData && workspacePlatformsData.length > 0) {
+        // Extract unique platforms
+        const uniquePlatforms = Array.from(
+          new Map(
+            workspacePlatformsData
+              .map((cp: any) => cp.platforms)
+              .filter((p: any) => p !== null)
+              .map((p: Platform) => [p.id, p]),
+          ).values(),
+        ) as Platform[]
+        setWorkspacePlatforms(uniquePlatforms)
+      }
+    }
 
     await loadContent(membership.workspace_id)
     await loadCalendarEvents(membership.workspace_id)
@@ -227,9 +253,10 @@ export default function ContentPage() {
       return false
     }
 
-    // Format filter
-    if (selectedFormat !== "all" && item.format !== selectedFormat) {
-      return false
+    // Platform filter
+    if (selectedPlatform !== "all") {
+      const hasPlatform = item.content_platforms?.some((cp) => cp.platforms.id === selectedPlatform || cp.platforms.name === selectedPlatform)
+      if (!hasPlatform) return false
     }
 
     return true
@@ -356,101 +383,98 @@ export default function ContentPage() {
           </div>
         </div>
 
-        <Card className="shadow-sm">
-          <CardContent className="pt-3 space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              {/* Search bar - left aligned, increased width */}
-              <div className="relative flex-1 min-w-[200px]">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search by title, creator, pillar, platform, format..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9"
-                />
-              </div>
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+          {/* Search bar - left aligned, increased width */}
+          <div className="relative flex-1 min-w-[200px]">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+            <Input
+              placeholder="Search by title, creator, pillar, platform, format..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 bg-white"
+            />
+          </div>
 
-              {/* Filter buttons - right aligned, reduced width, wraps when needed */}
-              <div className="flex flex-wrap gap-2 justify-end">
-                <Select value={selectedBatch} onValueChange={setSelectedBatch}>
-                  <SelectTrigger className="w-[130px] hover:bg-accent/20 transition-colors">
-                    <SelectValue placeholder="Batch" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Batches</SelectItem>
-                    {batches.map((batch) => (
-                      <SelectItem key={batch.id} value={batch.id}>
-                        {batch.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+          {/* Filter buttons - right aligned, reduced width, wraps when needed */}
+          <div className="flex flex-wrap gap-2 justify-end">
+            <Select value={selectedBatch} onValueChange={setSelectedBatch}>
+              <SelectTrigger className="w-[130px] hover:bg-accent/20 transition-colors bg-white">
+                <SelectValue placeholder="Batch" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Batches</SelectItem>
+                {batches.map((batch) => (
+                  <SelectItem key={batch.id} value={batch.id}>
+                    {batch.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-                <Select value={selectedCreator} onValueChange={setSelectedCreator}>
-                  <SelectTrigger className="w-[130px] hover:bg-accent/20 transition-colors">
-                    <SelectValue placeholder="Creator" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Creators</SelectItem>
-                    {creators.map((creator) => (
-                      <SelectItem key={creator.id} value={creator.id}>
-                        {creator.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+            <Select value={selectedCreator} onValueChange={setSelectedCreator}>
+              <SelectTrigger className="w-[130px] hover:bg-accent/20 transition-colors bg-white">
+                <SelectValue placeholder="Creator" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Creators</SelectItem>
+                {creators.map((creator) => (
+                  <SelectItem key={creator.id} value={creator.id}>
+                    {creator.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-                <Select value={selectedStage} onValueChange={setSelectedStage}>
-                  <SelectTrigger className="w-[130px] hover:bg-accent/20 transition-colors">
-                    <SelectValue placeholder="Stage" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Stages</SelectItem>
-                    <SelectItem value="idea">Idea</SelectItem>
-                    <SelectItem value="scripted">Scripted</SelectItem>
-                    <SelectItem value="approved">Approved</SelectItem>
-                    <SelectItem value="shot">Shot</SelectItem>
-                    <SelectItem value="edited">Edited</SelectItem>
-                    <SelectItem value="scheduled">Scheduled</SelectItem>
-                    <SelectItem value="posted">Posted</SelectItem>
-                  </SelectContent>
-                </Select>
+            <Select value={selectedStage} onValueChange={setSelectedStage}>
+              <SelectTrigger className="w-[130px] hover:bg-accent/20 transition-colors bg-white">
+                <SelectValue placeholder="Stage" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Stages</SelectItem>
+                <SelectItem value="idea">Idea</SelectItem>
+                <SelectItem value="scripted">Scripted</SelectItem>
+                <SelectItem value="approved">Approved</SelectItem>
+                <SelectItem value="shot">Shot</SelectItem>
+                <SelectItem value="edited">Edited</SelectItem>
+                <SelectItem value="scheduled">Scheduled</SelectItem>
+                <SelectItem value="posted">Posted</SelectItem>
+              </SelectContent>
+            </Select>
 
-                <Select value={selectedFormat} onValueChange={setSelectedFormat}>
-                  <SelectTrigger className="w-[130px] hover:bg-accent/20 transition-colors">
-                    <SelectValue placeholder="Format" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Formats</SelectItem>
-                    <SelectItem value="reel">Reel</SelectItem>
-                    <SelectItem value="post">Post</SelectItem>
-                    <SelectItem value="story">Story</SelectItem>
-                    <SelectItem value="carousel">Carousel</SelectItem>
-                    <SelectItem value="short">Short</SelectItem>
-                    <SelectItem value="long_video">Long Video</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+            <Select value={selectedPlatform} onValueChange={setSelectedPlatform}>
+              <SelectTrigger className="w-[145px] hover:bg-accent/20 transition-colors bg-white">
+                <SelectValue placeholder="Platform" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Platforms</SelectItem>
+                {workspacePlatforms.map((platform) => (
+                  <SelectItem key={platform.id} value={platform.id}>
+                    {platform.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
 
-            {/* Table Section */}
+        {/* Table Section */}
             {isLoading ? (
               <div className="py-12 text-center">
                 <p className="text-muted-foreground">Loading content...</p>
               </div>
             ) : filteredContent.length > 0 ? (
-              <div className="space-y-4">
+              <div className="bg-white border rounded-lg">
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-accent hover:bg-accent">
-                      <TableHead className="font-semibold w-8 text-white"></TableHead>
+                      <TableHead className="font-semibold w-8 text-white rounded-tl-lg"></TableHead>
                       <TableHead className="font-semibold text-white">Title</TableHead>
                       <TableHead className="font-semibold text-white">Stage</TableHead>
                       <TableHead className="font-semibold text-white">Creator</TableHead>
                       <TableHead className="font-semibold text-white">Created By</TableHead>
                       <TableHead className="font-semibold text-white">Pillar</TableHead>
-                      <TableHead className="font-semibold text-white">Platforms</TableHead>
-                      <TableHead className="font-semibold text-white">Format</TableHead>
+                      <TableHead className="font-semibold text-white text-center">Platforms</TableHead>
+                      <TableHead className="font-semibold text-white rounded-tr-lg">Format</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -537,8 +561,8 @@ export default function ContentPage() {
                                         ))}
                                       </div>
                                     </TableCell>
-                                    <TableCell>
-                                      <div className="flex flex-wrap gap-2">
+                                    <TableCell className="text-center">
+                                      <div className="flex flex-wrap gap-2 items-center justify-center">
                                         {item.content_platforms?.map((cp, idx) => {
                                           const platformName = cp.platforms.name.toLowerCase()
                                           let iconPath = ""
@@ -558,12 +582,13 @@ export default function ContentPage() {
                                           }
 
                                           return iconPath ? (
-                                            <img
-                                              key={idx}
-                                              src={iconPath || "/placeholder.svg"}
-                                              alt={cp.platforms.name}
-                                              className="size-5"
-                                            />
+                                            <div key={idx} className="flex items-center justify-center">
+                                              <img
+                                                src={iconPath || "/placeholder.svg"}
+                                                alt={cp.platforms.name}
+                                                className="size-8"
+                                              />
+                                            </div>
                                           ) : (
                                             <span key={idx} className="text-xs">
                                               {cp.platforms.name}
@@ -788,6 +813,7 @@ export default function ContentPage() {
                                                     className="gap-1.5 bg-white"
                                                     onClick={() => {
                                                       setSchedulingContentId(item.id)
+                                                      setSchedulingBatchId(item.batch_id || null)
                                                       setShowScheduleDialog(true)
                                                     }}
                                                   >
@@ -941,8 +967,8 @@ export default function ContentPage() {
                                     ))}
                                   </div>
                                 </TableCell>
-                                <TableCell>
-                                  <div className="flex flex-wrap gap-2">
+                                <TableCell className="text-center">
+                                  <div className="flex flex-wrap gap-2 items-center justify-center">
                                     {item.content_platforms?.map((cp, idx) => {
                                       const platformName = cp.platforms.name.toLowerCase()
                                       let iconPath = ""
@@ -962,12 +988,13 @@ export default function ContentPage() {
                                       }
 
                                       return iconPath ? (
-                                        <img
-                                          key={idx}
-                                          src={iconPath || "/placeholder.svg"}
-                                          alt={cp.platforms.name}
-                                          className="size-5"
-                                        />
+                                        <div key={idx} className="flex items-center justify-center">
+                                          <img
+                                            src={iconPath || "/placeholder.svg"}
+                                            alt={cp.platforms.name}
+                                            className="size-8"
+                                          />
+                                        </div>
                                       ) : (
                                         <span key={idx} className="text-xs">
                                           {cp.platforms.name}
@@ -1188,6 +1215,7 @@ export default function ContentPage() {
                                                 className="gap-1.5 bg-white"
                                                 onClick={() => {
                                                   setSchedulingContentId(item.id)
+                                                  setSchedulingBatchId(item.batch_id || null)
                                                   setShowScheduleDialog(true)
                                                 }}
                                               >
@@ -1285,8 +1313,6 @@ export default function ContentPage() {
                 />
               </div>
             )}
-          </CardContent>
-        </Card>
       </main>
 
       <Footer />
@@ -1294,9 +1320,16 @@ export default function ContentPage() {
       {showScheduleDialog && (
         <CreateEventDialog
           workspaceId={workspaceId}
+          creators={creators}
+          batches={batches}
+          contentId={schedulingContentId}
+          batchId={schedulingBatchId}
           open={showScheduleDialog}
           onOpenChange={setShowScheduleDialog}
-          initialContentId={schedulingContentId}
+          onEventCreated={() => {
+            loadCalendarEvents(workspaceId)
+            setShowScheduleDialog(false)
+          }}
         />
       )}
     </div>

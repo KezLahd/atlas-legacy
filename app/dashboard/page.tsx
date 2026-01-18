@@ -12,7 +12,7 @@ import { ChevronLeft, ChevronRight, ChevronDown, ChevronUp } from "lucide-react"
 import { CreateEventDialog } from "@/components/create-event-dialog"
 import { EditEventDialog } from "@/components/edit-event-dialog"
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card"
-import type { CalendarEvent, Creator } from "@/lib/types/database"
+import type { CalendarEvent, Creator, Batch } from "@/lib/types/database"
 
 interface EventWithDetails extends CalendarEvent {
   content: { hook: string } | null
@@ -28,6 +28,7 @@ export default function DashboardPage() {
   const [workspaceName, setWorkspaceName] = useState<string>("")
   const [events, setEvents] = useState<EventWithDetails[]>([])
   const [creators, setCreators] = useState<Creator[]>([])
+  const [batches, setBatches] = useState<Batch[]>([])
   const [currentDate, setCurrentDate] = useState(new Date())
   const [loading, setLoading] = useState(true)
   const [expandedDays, setExpandedDays] = useState<Set<number>>(new Set())
@@ -68,14 +69,22 @@ export default function DashboardPage() {
     setWorkspaceId(membership.workspace_id)
     setWorkspaceName(membership.workspaces?.name || "")
 
-    // Load creators
-    const { data: creatorsData } = await supabase
-      .from("creators")
-      .select("*")
-      .eq("workspace_id", membership.workspace_id)
-      .order("name")
+    // Load creators and batches
+    const [creatorsRes, batchesRes] = await Promise.all([
+      supabase
+        .from("creators")
+        .select("*")
+        .eq("workspace_id", membership.workspace_id)
+        .order("name"),
+      supabase
+        .from("batches")
+        .select("*")
+        .eq("workspace_id", membership.workspace_id)
+        .order("created_at", { ascending: false }),
+    ])
 
-    if (creatorsData) setCreators(creatorsData)
+    if (creatorsRes.data) setCreators(creatorsRes.data)
+    if (batchesRes.data) setBatches(batchesRes.data)
     setLoading(false)
   }
 
@@ -228,13 +237,13 @@ export default function DashboardPage() {
     return dayDate < today
   }
 
-  const categoryColors: Record<string, { bg: string; text: string; border: string }> = {
-    filming: { bg: "bg-pink-100", text: "text-pink-700", border: "border-pink-200" },
-    editing: { bg: "bg-blue-100", text: "text-blue-700", border: "border-blue-200" },
-    review: { bg: "bg-orange-100", text: "text-orange-700", border: "border-orange-200" },
-    meeting: { bg: "bg-purple-100", text: "text-purple-700", border: "border-purple-200" },
-    deadline: { bg: "bg-red-100", text: "text-red-700", border: "border-red-200" },
-    posting: { bg: "bg-green-100", text: "text-green-700", border: "border-green-200" },
+  const categoryColors: Record<string, { bg: string; text: string; border: string; filledBg: string; filledText: string }> = {
+    filming: { bg: "bg-pink-100", text: "text-pink-700", border: "border-pink-200", filledBg: "bg-pink-500", filledText: "text-white" },
+    editing: { bg: "bg-blue-100", text: "text-blue-700", border: "border-blue-200", filledBg: "bg-blue-500", filledText: "text-white" },
+    review: { bg: "bg-orange-100", text: "text-orange-700", border: "border-orange-200", filledBg: "bg-orange-500", filledText: "text-white" },
+    meeting: { bg: "bg-purple-100", text: "text-purple-700", border: "border-purple-200", filledBg: "bg-purple-500", filledText: "text-white" },
+    deadline: { bg: "bg-red-100", text: "text-red-700", border: "border-red-200", filledBg: "bg-red-500", filledText: "text-white" },
+    posting: { bg: "bg-green-100", text: "text-green-700", border: "border-green-200", filledBg: "bg-green-500", filledText: "text-white" },
   }
 
   const getCategoryColor = (category: string) => {
@@ -270,6 +279,7 @@ export default function DashboardPage() {
             <CreateEventDialog
               workspaceId={workspaceId}
               creators={creators}
+              batches={batches}
               onEventCreated={() => loadEvents()}
               trigger={<Button className="bg-accent text-accent-foreground hover:bg-accent/90">Create Event</Button>}
             />
@@ -319,8 +329,8 @@ export default function DashboardPage() {
                           className={`min-h-32 rounded-lg p-3 transition-colors ${
                             !day
                               ? "bg-transparent"
-                              : today
-                                ? "border-2 ring-2 bg-accent/30 border-accent ring-accent/40 hover:bg-accent/40 cursor-pointer"
+                              :                             today
+                              ? "border-2 ring-2 bg-accent/30 border-accent ring-accent/40 hover:bg-accent/40 cursor-pointer"
                                 : past
                                   ? "bg-white/60 border border-muted-foreground/20 opacity-60 hover:opacity-80 cursor-pointer"
                                   : "bg-white border border-border hover:bg-accent cursor-pointer"
@@ -357,7 +367,7 @@ export default function DashboardPage() {
                                           }}
                                           className={`text-xs p-1.5 rounded truncate cursor-pointer border ${
                                             today
-                                              ? `${colors.bg.replace("-100", "-500")} text-white ${colors.border.replace("-200", "-600")}`
+                                              ? `${colors.filledBg} ${colors.filledText} border-transparent`
                                               : isEventPast
                                                 ? `${colors.bg} ${colors.text} ${colors.border} opacity-50 line-through`
                                                 : `${colors.bg} ${colors.text} ${colors.border}`
@@ -383,7 +393,11 @@ export default function DashboardPage() {
                                               })}
                                             </div>
                                             <div
-                                              className={`px-3 py-1 rounded-full text-xs capitalize ${getCategoryColor(event.category || "").bg} ${getCategoryColor(event.category || "").text} ${getCategoryColor(event.category || "").border} border`}
+                                              className={`px-3 py-1 rounded-full text-xs capitalize ${
+                                                today
+                                                  ? `${getCategoryColor(event.category || "").filledBg} ${getCategoryColor(event.category || "").filledText} border-transparent`
+                                                  : `${getCategoryColor(event.category || "").bg} ${getCategoryColor(event.category || "").text} ${getCategoryColor(event.category || "").border} border`
+                                              }`}
                                             >
                                               {event.category}
                                             </div>
@@ -458,7 +472,7 @@ export default function DashboardPage() {
                                       e.stopPropagation()
                                       toggleDayExpansion(day)
                                     }}
-                                    className="text-xs text-primary hover:text-primary/80 pl-1.5 flex items-center gap-1"
+                                    className="text-xs text-primary hover:text-primary/80 pl-1.5 flex items-center gap-1 transition-colors"
                                   >
                                     {isExpanded ? (
                                       <>

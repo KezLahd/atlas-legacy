@@ -318,7 +318,7 @@ export default function SettingsPage() {
     setTimeout(() => setCopied(false), 2000)
   }
 
-  const canEdit = membership?.role === "owner" || membership?.role === "admin"
+  const canEdit = membership?.role === "owner"
 
   const handleDragStart = (index: number, source: "active" | "bank") => {
     setDraggedIndex(index)

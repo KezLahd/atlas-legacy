@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import React, { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
@@ -26,6 +26,19 @@ interface CreateContentDialogProps {
   creators: Creator[]
   onContentCreated: () => void
   workspaceType?: string
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+  trigger?: React.ReactNode
+  initialValues?: {
+    hook?: string
+    creatorId?: string
+    creatorUsername?: string
+    platforms?: string[]
+    format?: string
+    pillarId?: string
+    style?: string
+    researchId?: string
+  }
 }
 
 export function CreateContentDialog({
@@ -33,9 +46,15 @@ export function CreateContentDialog({
   creators,
   onContentCreated,
   workspaceType,
+  open: externalOpen,
+  onOpenChange: externalOnOpenChange,
+  trigger,
+  initialValues,
 }: CreateContentDialogProps) {
   const supabase = createClient()
-  const [open, setOpen] = useState(false)
+  const [internalOpen, setInternalOpen] = useState(false)
+  const open = externalOpen !== undefined ? externalOpen : internalOpen
+  const setOpen = externalOnOpenChange || setInternalOpen
   const [isLoading, setIsLoading] = useState(false)
   const [currentTab, setCurrentTab] = useState("context")
 
@@ -152,11 +171,54 @@ export function CreateContentDialog({
   useEffect(() => {
     if (open) {
       loadData()
+    } else {
+      // Reset form when dialog closes
+      resetForm()
+    }
+  }, [open])
+
+  // Set initial values when dialog opens and initialValues are provided
+  useEffect(() => {
+    if (open && initialValues && creators.length > 0) {
+      if (initialValues.hook) {
+        setHook(initialValues.hook)
+      }
+      if (initialValues.format) {
+        setFormat(initialValues.format as ContentFormat)
+      }
+      if (initialValues.pillarId) {
+        setSelectedPillar(initialValues.pillarId)
+      }
+      if (initialValues.style) {
+        setStyle(initialValues.style as ContentStyle)
+      }
+      if (initialValues.platforms && initialValues.platforms.length > 0) {
+        setSelectedPlatforms(initialValues.platforms)
+      }
+      // Find creator by username or use provided creatorId
+      if (initialValues.creatorUsername) {
+        const matchedCreator = creators.find(
+          (c) => c.name?.toLowerCase().replace("@", "").replace(" ", "") === 
+                 initialValues.creatorUsername?.toLowerCase().replace("@", "").replace(" ", "")
+        )
+        if (matchedCreator) {
+          setSelectedCreator(matchedCreator.id)
+        }
+      } else if (initialValues.creatorId) {
+        setSelectedCreator(initialValues.creatorId)
+      }
+    }
+  }, [open, initialValues, creators])
+
+  // Auto-select creator if there's only one and no creator is selected yet
+  useEffect(() => {
+    if (open && creators.length > 0 && !selectedCreator) {
       if (creators.length === 1 || workspaceType === "personal_creator") {
         setSelectedCreator(creators[0].id)
       }
     }
-  }, [open, selectedCreator, workspaceType])
+  }, [open, creators, selectedCreator, workspaceType])
+
 
   useEffect(() => {
     if (isDoubleDownPillarSelected() && selectedCreator) {
@@ -199,17 +261,38 @@ export function CreateContentDialog({
   }, [selectedPillar])
 
   const loadData = async () => {
+    // Always load all workspace platforms, not just creator-specific
+    // Get all creators in the workspace
+    const { data: workspaceCreators } = await supabase
+      .from("creators")
+      .select("id")
+      .eq("workspace_id", workspaceId)
+
+    const creatorIds = workspaceCreators?.map((c) => c.id) || []
+
     let platformsRes
-    if (selectedCreator) {
-      // Fetch platforms specific to the selected creator
-      const { data: creatorPlatformsData } = await supabase
+    if (creatorIds.length > 0) {
+      // Get all platforms for all creators in the workspace
+      const { data: workspacePlatformsData } = await supabase
         .from("creator_platforms")
         .select("platforms(*)")
-        .eq("creator_id", selectedCreator)
+        .in("creator_id", creatorIds)
 
-      platformsRes = { data: creatorPlatformsData?.map((cp: any) => cp.platforms) || [] }
+      if (workspacePlatformsData && workspacePlatformsData.length > 0) {
+        // Extract unique platforms
+        const uniquePlatforms = Array.from(
+          new Map(
+            workspacePlatformsData
+              .map((cp: any) => cp.platforms)
+              .filter((p: any) => p !== null)
+              .map((p: Platform) => [p.id, p]),
+          ).values(),
+        ) as Platform[]
+        platformsRes = { data: uniquePlatforms }
+      } else {
+        platformsRes = { data: [] }
+      }
     } else {
-      // If no creator selected yet, show empty platforms
       platformsRes = { data: [] }
     }
 
@@ -364,6 +447,7 @@ export function CreateContentDialog({
         series_id: selectedSeries !== "none" ? selectedSeries : null,
         episode_number: episodeNumber || null,
         content_type_id: selectedContentType || null,
+        research_id: initialValues?.researchId || null,
         created_by: user?.id || null, // Added user tracking
         updated_by: user?.id || null, // Added user tracking
       }
@@ -395,6 +479,18 @@ export function CreateContentDialog({
         await supabase.from("content_content_pillars").insert({
           content_id: newContent.id,
           pillar_id: selectedPillar,
+        })
+      }
+
+      // Log creation to audit trail
+      if (newContent && newContent.id && user?.id) {
+        await supabase.from("content_audit_log").insert({
+          content_id: newContent.id,
+          user_id: user.id,
+          action: "created",
+          field_changed: null,
+          old_value: null,
+          new_value: null,
         })
       }
 
@@ -436,12 +532,19 @@ export function CreateContentDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button>
-          <Plus className="size-4 mr-2" />
-          Create Content
-        </Button>
-      </DialogTrigger>
+      {!externalOpen && trigger && (
+        <DialogTrigger asChild>
+          {trigger}
+        </DialogTrigger>
+      )}
+      {!externalOpen && !trigger && (
+        <DialogTrigger asChild>
+          <Button>
+            <Plus className="size-4 mr-2" />
+            Create Content
+          </Button>
+        </DialogTrigger>
+      )}
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto bg-white">
         <DialogHeader>
           <DialogTitle>Create New Content</DialogTitle>
@@ -483,19 +586,24 @@ export function CreateContentDialog({
             {/* Creator Selection */}
             {workspaceType !== "personal_creator" && (
               <div className="space-y-2">
-                <Label htmlFor="creator">Creator *</Label>
-                <Select value={selectedCreator} onValueChange={setSelectedCreator}>
-                  <SelectTrigger id="creator">
-                    <SelectValue placeholder="Select creator" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {creators.map((creator) => (
-                      <SelectItem key={creator.id} value={creator.id}>
-                        {creator.name || creator.brand_name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label>Creator *</Label>
+                <div className="grid grid-cols-3 gap-2">
+                  {creators.map((creator) => (
+                    <Button
+                      key={creator.id}
+                      type="button"
+                      variant={selectedCreator === creator.id ? "default" : "outline"}
+                      className={`w-full ${
+                        selectedCreator === creator.id
+                          ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                          : "bg-white hover:bg-accent"
+                      }`}
+                      onClick={() => setSelectedCreator(creator.id)}
+                    >
+                      {creator.name || creator.brand_name}
+                    </Button>
+                  ))}
+                </div>
               </div>
             )}
 

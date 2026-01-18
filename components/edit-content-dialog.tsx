@@ -67,6 +67,7 @@ export function EditContentDialog({
   const [style, setStyle] = useState<ContentStyle>("talking_head")
   const [storytellingFormat, setStorytellingFormat] = useState<string>("none")
   const [selectedContentType, setSelectedContentType] = useState<string>("")
+  const [originalContent, setOriginalContent] = useState<any>(null)
 
   const isFormValid = () => {
     return (
@@ -188,6 +189,9 @@ export function EditContentDialog({
       .single()
 
     if (content) {
+      // Store original content for audit trail comparison
+      setOriginalContent(content)
+
       setSelectedCreator(content.creator_id || "")
       setHook(content.hook || "")
       setFormat(content.format || "reel")
@@ -251,6 +255,53 @@ export function EditContentDialog({
         contentData.storytelling_format = storytellingFormat
       }
 
+      // Track changes for audit log
+      const changes: Array<{ field: string; oldValue: any; newValue: any }> = []
+
+      const compareAndTrack = (field: string, oldVal: any, newVal: any) => {
+        const oldStr = oldVal?.toString() || ""
+        const newStr = newVal?.toString() || ""
+        if (oldStr !== newStr) {
+          changes.push({ field, oldValue: oldStr, newValue: newStr })
+        }
+      }
+
+      if (originalContent) {
+        // Compare all fields
+        compareAndTrack("creator_id", originalContent.creator_id, selectedCreator)
+        compareAndTrack("hook", originalContent.hook, hook)
+        compareAndTrack("format", originalContent.format, format)
+        compareAndTrack("four_h_id", originalContent.four_h_id, selectedFourH || null)
+        compareAndTrack("batch_id", originalContent.batch_id, selectedBatch !== "none" ? selectedBatch : null)
+        compareAndTrack("series_id", originalContent.series_id, selectedSeries !== "none" ? selectedSeries : null)
+        compareAndTrack("episode_number", originalContent.episode_number, episodeNumber || null)
+        compareAndTrack("content_type_id", originalContent.content_type_id, selectedContentType || null)
+        compareAndTrack("style", originalContent.style, !isSeriesPillarSelected() ? style : null)
+        compareAndTrack(
+          "storytelling_format_id",
+          originalContent.storytelling_format_id,
+          isStorytellingPillarSelected() && storytellingFormat !== "none" ? storytellingFormat : null,
+        )
+
+        // Compare platforms
+        const oldPlatformIds = originalContent.content_platforms
+          ? originalContent.content_platforms.map((cp: any) => cp.platform_id).sort()
+          : []
+        const newPlatformIds = [...selectedPlatforms].sort()
+        if (JSON.stringify(oldPlatformIds) !== JSON.stringify(newPlatformIds)) {
+          changes.push({
+            field: "platforms",
+            oldValue: oldPlatformIds.join(", "),
+            newValue: newPlatformIds.join(", "),
+          })
+        }
+
+        // Compare pillars
+        const oldPillarId = originalContent.content_content_pillars?.[0]?.pillar_id || null
+        const newPillarId = selectedPillar || null
+        compareAndTrack("pillar_id", oldPillarId, newPillarId)
+      }
+
       const { error: contentError } = await supabase.from("content").update(contentData).eq("id", contentId)
 
       if (contentError) throw contentError
@@ -271,6 +322,20 @@ export function EditContentDialog({
           content_id: contentId,
           pillar_id: selectedPillar,
         })
+      }
+
+      // Log changes to audit trail
+      if (changes.length > 0 && user?.id) {
+        const auditLogEntries = changes.map((change) => ({
+          content_id: contentId,
+          user_id: user.id,
+          action: "updated",
+          field_changed: change.field,
+          old_value: change.oldValue,
+          new_value: change.newValue,
+        }))
+
+        await supabase.from("content_audit_log").insert(auditLogEntries)
       }
 
       setOpen(false)
