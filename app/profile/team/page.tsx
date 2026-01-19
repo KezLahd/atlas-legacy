@@ -93,12 +93,12 @@ export default function TeamPage() {
       if (membersResult.error) {
         console.error("[v0] Error loading members:", membersResult.error)
         // Fallback to client-side query
-        const { data: membersData } = await supabase
-          .from("workspace_members")
-          .select("*, user_profiles(first_name, last_name, email, avatar_type, avatar_bg_color, avatar_text_color, avatar_storage_path)")
-          .eq("workspace_id", membership.workspace_id)
-          .order("created_at")
-        
+      const { data: membersData } = await supabase
+        .from("workspace_members")
+        .select("*, user_profiles(first_name, last_name, email, avatar_type, avatar_bg_color, avatar_text_color, avatar_storage_path)")
+        .eq("workspace_id", membership.workspace_id)
+        .order("created_at")
+
         // Enhance current user's email if missing
         membersList = (membersData || []).map((member: any) => {
           if (!member.user_profiles?.email && member.user_id === authUser.id && authUser.email) {
@@ -109,7 +109,7 @@ export default function TeamPage() {
           }
           return member
         })
-        setMembers(membersList)
+      setMembers(membersList)
       } else {
         membersList = membersResult.data || []
         setMembers(membersList)

@@ -207,20 +207,11 @@ export default function AccountPage() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      <main className="container mx-auto p-6 space-y-6 flex-1 max-w-3xl">
-        <div className="flex items-center justify-between">
-          <h1 className="text-3xl font-bold">Personal Profile</h1>
-          <Button
-            onClick={handleSave}
-            disabled={saving || !hasChanges}
-            className="bg-accent text-accent-foreground hover:bg-accent/90"
-          >
-            <Save className="size-4 mr-2" />
-            {saving ? "Saving..." : "Save Changes"}
-          </Button>
+      <main className="container mx-auto p-4 md:p-6 space-y-4 md:space-y-6 flex-1 max-w-2xl">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold">Personal Profile</h1>
+          <p className="text-muted-foreground">Manage your personal account settings and profile appearance</p>
         </div>
-
-        <p className="text-muted-foreground">Manage your personal account settings and profile appearance</p>
 
         {error && (
           <Card className="border-destructive">
@@ -239,11 +230,20 @@ export default function AccountPage() {
         )}
 
         <Card>
-          <CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0">
             <CardTitle>Profile Information</CardTitle>
+            <Button
+              onClick={handleSave}
+              disabled={saving || !hasChanges}
+              size="sm"
+              className="bg-accent text-accent-foreground hover:bg-accent/90"
+            >
+              <Save className="size-4 mr-2" />
+              {saving ? "Saving..." : "Save"}
+            </Button>
           </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="grid grid-cols-2 gap-4">
+          <CardContent className="space-y-4 md:space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>First Name</Label>
                 <Input
@@ -274,121 +274,130 @@ export default function AccountPage() {
         </Card>
 
         <Card>
-          <CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0">
             <CardTitle>Profile Avatar</CardTitle>
+            <Button
+              onClick={handleSave}
+              disabled={saving || !hasChanges}
+              size="sm"
+              className="bg-accent text-accent-foreground hover:bg-accent/90"
+            >
+              <Save className="size-4 mr-2" />
+              {saving ? "Saving..." : "Save"}
+            </Button>
           </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="flex items-start gap-6">
-              <div className="flex flex-col items-center gap-3">
-                <Avatar className="size-32">
-                  {avatarType === "upload" && avatarUrl ? (
-                    <AvatarImage src={avatarUrl || "/placeholder.svg"} alt="Profile" />
-                  ) : (
-                    <AvatarFallback
-                      className="text-2xl font-semibold"
-                      style={{ backgroundColor: avatarBgColor, color: avatarTextColor }}
-                    >
-                      {getInitials()}
-                    </AvatarFallback>
-                  )}
-                </Avatar>
-                <p className="text-sm text-muted-foreground">Preview</p>
-              </div>
+          <CardContent className="space-y-4 md:space-y-6">
+            {/* Avatar Preview - 1 column */}
+            <div className="flex flex-col items-center gap-3">
+              <Avatar className="size-24 md:size-32">
+                {avatarType === "upload" && avatarUrl ? (
+                  <AvatarImage src={avatarUrl || "/placeholder.svg"} alt="Profile" />
+                ) : (
+                  <AvatarFallback
+                    className="text-2xl font-semibold"
+                    style={{ backgroundColor: avatarBgColor, color: avatarTextColor }}
+                  >
+                    {getInitials()}
+                  </AvatarFallback>
+                )}
+              </Avatar>
+              <p className="text-sm text-muted-foreground">Preview</p>
+            </div>
 
-              <div className="flex-1 space-y-4">
-                <div className="space-y-3">
-                  <Label>Avatar Type</Label>
-                  <div className="flex gap-3">
-                    <Button
-                      variant={avatarType === "initials" ? "default" : "outline"}
-                      onClick={() => setAvatarType("initials")}
-                      className="flex-1"
-                    >
-                      <User className="size-4 mr-2" />
-                      Initials Badge
-                    </Button>
-                    <Button
-                      variant={avatarType === "upload" ? "default" : "outline"}
-                      onClick={() => setAvatarType("upload")}
-                      className="flex-1"
-                    >
-                      <Upload className="size-4 mr-2" />
-                      Upload Image
-                    </Button>
+            {/* Avatar Type Toggle - 2 columns side by side */}
+            <div className="space-y-3">
+              <Label>Avatar Type</Label>
+              <div className="grid grid-cols-2 gap-3">
+                <Button
+                  variant={avatarType === "initials" ? "default" : "outline"}
+                  onClick={() => setAvatarType("initials")}
+                  className="w-full"
+                  size="sm"
+                >
+                  <User className="size-4 mr-2" />
+                  Initials Badge
+                </Button>
+                <Button
+                  variant={avatarType === "upload" ? "default" : "outline"}
+                  onClick={() => setAvatarType("upload")}
+                  className="w-full"
+                  size="sm"
+                >
+                  <Upload className="size-4 mr-2" />
+                  Upload Image
+                </Button>
+              </div>
+            </div>
+
+            {avatarType === "initials" && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Background Color</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      type="color"
+                      value={avatarBgColor}
+                      onChange={(e) => setAvatarBgColor(e.target.value)}
+                      className="w-16 h-10 cursor-pointer"
+                    />
+                    <Input
+                      type="text"
+                      value={avatarBgColor}
+                      onChange={(e) => setAvatarBgColor(e.target.value)}
+                      placeholder="#89cff0"
+                      className="flex-1 text-sm"
+                    />
                   </div>
                 </div>
 
-                {avatarType === "initials" && (
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Background Color</Label>
-                      <div className="flex gap-2">
-                        <Input
-                          type="color"
-                          value={avatarBgColor}
-                          onChange={(e) => setAvatarBgColor(e.target.value)}
-                          className="w-16 h-10 cursor-pointer"
-                        />
-                        <Input
-                          type="text"
-                          value={avatarBgColor}
-                          onChange={(e) => setAvatarBgColor(e.target.value)}
-                          placeholder="#89cff0"
-                          className="flex-1"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>Text Color</Label>
-                      <div className="flex gap-2">
-                        <Input
-                          type="color"
-                          value={avatarTextColor}
-                          onChange={(e) => setAvatarTextColor(e.target.value)}
-                          className="w-16 h-10 cursor-pointer"
-                        />
-                        <Input
-                          type="text"
-                          value={avatarTextColor}
-                          onChange={(e) => setAvatarTextColor(e.target.value)}
-                          placeholder="#ffffff"
-                          className="flex-1"
-                        />
-                      </div>
-                    </div>
+                <div className="space-y-2">
+                  <Label>Text Color</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      type="color"
+                      value={avatarTextColor}
+                      onChange={(e) => setAvatarTextColor(e.target.value)}
+                      className="w-16 h-10 cursor-pointer"
+                    />
+                    <Input
+                      type="text"
+                      value={avatarTextColor}
+                      onChange={(e) => setAvatarTextColor(e.target.value)}
+                      placeholder="#ffffff"
+                      className="flex-1 text-sm"
+                    />
                   </div>
-                )}
-
-                {avatarType === "upload" && (
-                  <div
-                    className="border-2 border-dashed rounded-lg p-8 text-center cursor-pointer hover:border-primary transition-colors"
-                    onClick={() => document.getElementById("avatar-upload")?.click()}
-                    onDrop={(e) => {
-                      e.preventDefault()
-                      const file = e.dataTransfer.files?.[0]
-                      if (file) {
-                        const event = { target: { files: [file] } } as any
-                        handleAvatarUpload(event)
-                      }
-                    }}
-                    onDragOver={(e) => e.preventDefault()}
-                  >
-                    <Upload className="size-8 mx-auto mb-2 text-muted-foreground" />
-                    <p className="text-sm font-medium mb-1">Click to upload or drag and drop</p>
-                    <p className="text-xs text-muted-foreground">PNG, JPG, GIF up to 2MB</p>
-                  </div>
-                )}
-
-                <input
-                  id="avatar-upload"
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={handleAvatarUpload}
-                />
+                </div>
               </div>
-            </div>
+            )}
+
+            {avatarType === "upload" && (
+              <div
+                className="border-2 border-dashed rounded-lg p-4 md:p-8 text-center cursor-pointer hover:border-primary transition-colors"
+                onClick={() => document.getElementById("avatar-upload")?.click()}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  const file = e.dataTransfer.files?.[0]
+                  if (file) {
+                    const event = { target: { files: [file] } } as any
+                    handleAvatarUpload(event)
+                  }
+                }}
+                onDragOver={(e) => e.preventDefault()}
+              >
+                <Upload className="size-8 mx-auto mb-2 text-muted-foreground" />
+                <p className="text-sm font-medium mb-1">Click to upload or drag and drop</p>
+                <p className="text-xs text-muted-foreground">PNG, JPG, GIF up to 2MB</p>
+              </div>
+            )}
+
+            <input
+              id="avatar-upload"
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleAvatarUpload}
+            />
           </CardContent>
         </Card>
       </main>

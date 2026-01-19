@@ -4,7 +4,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useState } from "react"
 import { cn } from "@/lib/utils"
-import { UserCircle, Video, UsersRound, Settings, ArrowLeft, Palette, LayoutDashboard, ChevronUp, ChevronDown } from "lucide-react"
+import { UserCircle, Video, UsersRound, Settings, ArrowLeft, Palette, LayoutDashboard, ChevronLeft, ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 const profileNav = [
@@ -22,7 +22,7 @@ export function ProfileSidebar() {
   return (
     <aside className={cn(
       "border-r bg-slate-50 dark:bg-slate-900 transition-all duration-300 sticky top-16 h-[calc(100vh-64px)] flex flex-col",
-      isExpanded ? "w-64" : "w-16"
+      isExpanded ? "w-64" : "w-20"
     )}>
       <div className="p-4 space-y-4 flex-1">
         {/* Dashboard Icon */}
@@ -41,20 +41,24 @@ export function ProfileSidebar() {
               {isExpanded && <span className="ml-2 text-sm font-medium">Dashboard</span>}
             </Button>
           </Link>
-          {isExpanded && <div className="w-full border-b" />}
+          <div className="w-full border-b" />
         </div>
 
-        {/* Profile Navigation */}
-        <div className="space-y-1">
-          {isExpanded && (
-            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">Profile</h2>
-          )}
-          {profileNav.map((item, index) => {
-            const Icon = item.icon
-            const isActive = pathname === item.href || pathname.startsWith(item.href + "/")
-            return (
-              <div key={item.name}>
+        {/* Profile Navigation - Wrapped in accent container */}
+        <div className={cn(
+          "rounded-lg border bg-accent/30 border-accent/20",
+          isExpanded ? "p-3" : "p-2"
+        )}>
+          <div className="space-y-1">
+            {isExpanded && (
+              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">Profile</h2>
+            )}
+            {profileNav.map((item) => {
+              const Icon = item.icon
+              const isActive = pathname === item.href || pathname.startsWith(item.href + "/")
+              return (
                 <Link
+                  key={item.name}
                   href={item.href}
                   className={cn(
                     "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
@@ -68,13 +72,9 @@ export function ProfileSidebar() {
                   <Icon className="size-4 flex-shrink-0" />
                   {isExpanded && <span>{item.name}</span>}
                 </Link>
-                {/* Horizontal divider between icons when collapsed */}
-                {!isExpanded && index < profileNav.length - 1 && (
-                  <div className="border-b my-2 mx-auto w-6" />
-                )}
-              </div>
-            )
-          })}
+              )
+            })}
+          </div>
         </div>
       </div>
 
@@ -88,9 +88,9 @@ export function ProfileSidebar() {
           title={isExpanded ? "Collapse sidebar" : "Expand sidebar"}
         >
           {isExpanded ? (
-            <ChevronUp className="size-4" />
+            <ChevronLeft className="size-4" />
           ) : (
-            <ChevronDown className="size-4" />
+            <ChevronRight className="size-4" />
           )}
         </Button>
       </div>

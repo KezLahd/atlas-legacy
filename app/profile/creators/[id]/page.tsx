@@ -5,8 +5,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
-import { ArrowLeft, Calendar, FileText, Lightbulb, CheckCircle2 } from "lucide-react"
+import { ArrowLeft, Calendar, FileText } from "lucide-react"
 import { ContentCharts, PlatformChart } from "./content-charts"
+import { CreatorDetails } from "./creator-details"
 
 export const dynamic = 'force-dynamic'
 
@@ -38,8 +39,6 @@ export default async function CreatorDetailPage({ params }: { params: Promise<{ 
     notFound()
   }
 
-  // Debug: Log posting framework data
-  console.log("[Creator Detail] Posting framework:", creator.creator_posting_frameworks)
 
   // Verify user has access to this creator's workspace
   const { data: membership, error: membershipError } = await supabase
@@ -164,6 +163,9 @@ export default async function CreatorDetailPage({ params }: { params: Promise<{ 
     value,
   }))
 
+  // Get all platforms for editing
+  const { data: platformOptions } = await supabase.from("platforms").select("id,name").order("name")
+
   // Map content types from database
   const allContentTypes = contentTypes?.map((ct: any) => ({
     id: ct.id,
@@ -172,32 +174,30 @@ export default async function CreatorDetailPage({ params }: { params: Promise<{ 
     icon: ct.icon,
   })) || []
 
-  const postingFramework = creator.creator_posting_frameworks?.[0] || null
+  let postingFramework = creator.creator_posting_frameworks?.[0] || null
+
+  // Fallback: fetch directly if nested relation didn't return
+  if (!postingFramework) {
+    const { data: pf } = await supabase
+      .from("creator_posting_frameworks")
+      .select("posting_frequency, content_type_order, excluded_day_types")
+      .eq("creator_id", id)
+      .single()
+    postingFramework = pf || null
+  }
+
   const postingFrequency = postingFramework?.posting_frequency || null
   const contentTypeOrder = postingFramework?.content_type_order || []
   const excludedDayTypes = postingFramework?.excluded_day_types || []
-  
-  // Debug: Log the raw data
-  console.log("[Creator Detail] contentTypeOrder:", contentTypeOrder)
-  console.log("[Creator Detail] contentTypeOrder type:", typeof contentTypeOrder, Array.isArray(contentTypeOrder))
-  console.log("[Creator Detail] First typeId:", contentTypeOrder[0], typeof contentTypeOrder[0])
-  console.log("[Creator Detail] First content type id:", allContentTypes[0]?.id, typeof allContentTypes[0]?.id)
   
   // Map content types in order - use content_type_order array to get the correct order
   // Ensure we're comparing the same types (both should be numbers)
   const orderedContentTypes = contentTypeOrder.length > 0 && allContentTypes.length > 0
     ? contentTypeOrder
-        .map((typeId: number) => {
-          const found = allContentTypes.find((ct: any) => Number(ct.id) === Number(typeId))
-          console.log(`[Creator Detail] Looking for typeId ${typeId}, found:`, found)
-          return found
-        })
+        .map((typeId: number) => allContentTypes.find((ct: any) => Number(ct.id) === Number(typeId)))
         .filter((ct: any) => ct !== undefined && ct !== null)
     : postingFrequency && allContentTypes.length > 0 ? allContentTypes.slice(0, postingFrequency) : []
-  
-  // Debug: Log ordered content types
-  console.log("[Creator Detail] Ordered content types:", orderedContentTypes)
-  console.log("[Creator Detail] Ordered content types length:", orderedContentTypes.length)
+
 
   // Platform icon paths
   const platformConfig: Record<string, { icon: string }> = {
@@ -235,6 +235,29 @@ export default async function CreatorDetailPage({ params }: { params: Promise<{ 
     return eventDate >= today && eventDate <= nextWeek && e.category === "posting"
   }) || []
 
+  // Determine permissions:
+  // - owners/managers can edit any creator
+  // - creators can only edit creators they have access to (creator_access)
+  const { data: membershipRow } = await supabase
+    .from("workspace_members")
+    .select("id, role")
+    .eq("workspace_id", creator.workspace_id)
+    .eq("user_id", user.id)
+    .single()
+
+  const isAdmin = membershipRow?.role === "owner" || membershipRow?.role === "manager"
+
+  const { data: creatorAccessRow } = !isAdmin && membershipRow?.id
+    ? await supabase
+        .from("creator_access")
+        .select("id")
+        .eq("workspace_member_id", membershipRow.id)
+        .eq("creator_id", creator.id)
+        .maybeSingle()
+    : { data: null }
+
+  const canEdit = Boolean(isAdmin || creatorAccessRow?.id)
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <main className="container mx-auto p-6 space-y-6 flex-1">
@@ -251,126 +274,38 @@ export default async function CreatorDetailPage({ params }: { params: Promise<{ 
           </div>
         </div>
 
+        {/* Production Stage Chart (not in a card) */}
+        <ContentCharts contentByStage={contentByStage} platformChartData={platformChartData} />
+
         {/* Creator Details Card */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Creator Details</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground mb-2">Primary Niche</p>
-                <Badge variant="secondary" className="text-base">
-                  {creator.primary_niche}
-                </Badge>
-              </div>
+        <CreatorDetails
+          creatorId={creator.id}
+          name={creator.name}
+          brandName={creator.brand_name}
+          primaryNiche={creator.primary_niche}
+          subNiches={creator.creator_sub_niches?.map((sn: any) => sn.sub_niche) || []}
+          platforms={
+            creator.creator_platforms?.map((cp: any) => ({
+              name: cp.platforms?.name || "",
+              icon: platformConfig[cp.platforms?.name?.toLowerCase() || ""]?.icon,
+            })) || []
+          }
+          postingFrequency={postingFrequency}
+          orderedContentTypes={orderedContentTypes as any}
+          platformConfig={platformConfig}
+          platformOptions={platformOptions || []}
+          selectedPlatformIds={creator.creator_platforms?.map((cp: any) => cp.platforms?.id).filter(Boolean) || []}
+          contentTypeOrder={contentTypeOrder}
+          allContentTypes={allContentTypes as any}
+          canEdit={!!canEdit}
+        />
 
-              {creator.creator_sub_niches && creator.creator_sub_niches.length > 0 && (
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground mb-2">Sub-Niches</p>
-                  <div className="flex flex-wrap gap-2">
-                    {creator.creator_sub_niches.map((sn: any, idx: number) => (
-                      <Badge key={idx} variant="outline" className="text-xs">
-                        {sn.sub_niche}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div>
-                <p className="text-sm font-medium text-muted-foreground mb-2">Platforms</p>
-                <div className="flex flex-wrap gap-3">
-                  {creator.creator_platforms && creator.creator_platforms.length > 0 ? (
-                    creator.creator_platforms.map((cp: any, idx: number) => {
-                      const platformName = cp.platforms?.name?.toLowerCase() || ""
-                      const config = platformConfig[platformName] || { icon: "" }
-                      
-                      return (
-                        <div
-                          key={idx}
-                          className="flex items-center gap-2"
-                          title={cp.platforms?.name}
-                        >
-                          {config.icon ? (
-                            <img src={config.icon} alt={cp.platforms?.name} className="size-6 object-contain" />
-                          ) : (
-                            <span className="text-sm font-medium">{cp.platforms?.name}</span>
-                          )}
-                        </div>
-                      )
-                    })
-                  ) : (
-                    <p className="text-sm text-muted-foreground">No platforms configured</p>
-                  )}
-                </div>
-              </div>
-
-              <div>
-                <p className="text-sm font-medium text-muted-foreground mb-2">Posting Framework</p>
-                {postingFramework ? (
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <Calendar className="size-4 text-muted-foreground" />
-                      <span className="font-semibold">{postingFrequency} posts/week</span>
-                    </div>
-                    {orderedContentTypes && orderedContentTypes.length > 0 ? (
-                      <div className="flex flex-wrap gap-2">
-                        {orderedContentTypes.map((contentType: any, index: number) => {
-                          if (!contentType) return null
-                          return (
-                            <div key={contentType.id || index} className="flex items-center gap-1.5 px-2 py-1 bg-muted rounded-md text-xs">
-                              <span>{contentType.icon || "📝"}</span>
-                              <span className="font-medium">{contentType.name || "Content"}</span>
-                              <span className="text-muted-foreground">(Day {index + 1})</span>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    ) : (
-                      <div className="text-xs text-muted-foreground">
-                        <p>Content types not configured</p>
-                        <p className="text-[10px] mt-1">Debug: contentTypeOrder length: {contentTypeOrder.length}, allContentTypes length: {allContentTypes.length}</p>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">No posting framework configured</p>
-                )}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Key Stats Grid */}
-        <div className="grid gap-4 md:grid-cols-2">
-          <Card className="bg-red-100 border-red-200">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 p-4 pb-2">
-              <CardTitle className="text-sm font-medium text-red-800">Total Ideas</CardTitle>
-              <Lightbulb className="size-4 text-red-600" />
-            </CardHeader>
-            <CardContent className="px-4 pb-4 pt-0">
-              <div className="text-3xl font-bold text-red-800">{idea || 0}</div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-green-100 border-green-200">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 p-4 pb-2">
-              <CardTitle className="text-sm font-medium text-green-800">Total Posts</CardTitle>
-              <CheckCircle2 className="size-4 text-green-600" />
-            </CardHeader>
-            <CardContent className="px-4 pb-4 pt-0">
-              <div className="text-3xl font-bold text-green-800">{posted || 0}</div>
-            </CardContent>
-          </Card>
-        </div>
 
         {/* Main Content Grid */}
         <div className="grid gap-6 lg:grid-cols-3">
           {/* Left Column - 2/3 width */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Content Charts */}
-            <ContentCharts contentByStage={contentByStage} platformChartData={platformChartData} />
+            {/* (Chart moved above details) */}
           </div>
 
           {/* Right Column - 1/3 width */}
@@ -402,31 +337,6 @@ export default async function CreatorDetailPage({ params }: { params: Promise<{ 
                         </div>
                       )
                     })}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Content Framework */}
-            {postingFrequency && orderedContentTypes.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Content Framework</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {orderedContentTypes.map((contentType: any, index: number) => (
-                      <div key={contentType?.id || index} className="flex items-start gap-3 p-3 border rounded-lg">
-                        <div className="text-2xl flex-shrink-0">{contentType?.icon || "📝"}</div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <p className="text-xs font-bold text-muted-foreground">Day {index + 1}</p>
-                          </div>
-                          <h3 className="font-semibold text-sm">{contentType?.name || "Content Type"}</h3>
-                          <p className="text-xs text-muted-foreground">{contentType?.description || ""}</p>
-                        </div>
-                      </div>
-                    ))}
                   </div>
                 </CardContent>
               </Card>

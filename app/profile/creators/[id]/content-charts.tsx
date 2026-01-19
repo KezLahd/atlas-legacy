@@ -9,27 +9,29 @@ interface ContentChartsProps {
 }
 
 export function ContentCharts({ contentByStage, platformChartData }: ContentChartsProps) {
+  const filteredContentByStage = contentByStage.filter((stage) => stage.name.toLowerCase() !== "approved")
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Content by Production Stage</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <ResponsiveContainer width="100%" height={300}>
-          <BarChart data={contentByStage}>
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold">Content by Production Stage</h2>
+      </div>
+      <div className="w-full -ml-3 sm:-ml-4">
+        <ResponsiveContainer width="100%" height={240}>
+          <BarChart data={filteredContentByStage} margin={{ top: 6, right: 6, left: -28, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="name" />
-            <YAxis />
+            <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+            <YAxis tick={{ fontSize: 12 }} />
             <Tooltip />
-            <Bar dataKey="value">
-              {contentByStage.map((entry, index) => (
+            <Bar dataKey="value" barSize={28}>
+              {filteredContentByStage.map((entry, index) => (
                 <Cell key={`cell-${index}`} fill={entry.color} />
               ))}
             </Bar>
           </BarChart>
         </ResponsiveContainer>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   )
 }
 

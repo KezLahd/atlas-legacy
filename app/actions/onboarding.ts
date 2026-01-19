@@ -340,12 +340,20 @@ export async function joinWorkspaceWithReferralCode(referralCode: string) {
       console.error("[v0] Error creating creator record:", creatorError)
       return { error: "Failed to create creator record: " + creatorError.message }
     } else if (creatorData) {
+      // Create default posting framework for the creator
+      await serviceSupabase.from("creator_posting_frameworks").insert({
+        creator_id: creatorData.id,
+        posting_frequency: 7, // Default to 7 posts/week
+        content_type_order: [1, 2, 3, 4, 5, 6, 7], // Default order
+        excluded_day_types: [],
+      })
+
       // Add creator access for the new member
       await serviceSupabase.from("creator_access").insert({
         workspace_member_id: workspaceMember.id,
         creator_id: creatorData.id,
       })
-      
+
       // Redirect to creator setup page instead of dashboard
       redirect(`/onboarding/creator-setup?creatorId=${creatorData.id}`)
       return
