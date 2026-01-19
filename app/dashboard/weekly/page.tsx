@@ -6,8 +6,9 @@ import { createClient } from "@/lib/supabase/client"
 import { AppNav } from "@/components/app-nav"
 import { Footer } from "@/components/footer"
 import { Button } from "@/components/ui/button"
-import { ArrowLeft, ChevronLeft, ChevronRight, Calendar, Clock } from "lucide-react"
-import type { CalendarEvent } from "@/lib/types/database"
+import { ArrowLeft, ChevronLeft, ChevronRight, Calendar, Clock, Plus } from "lucide-react"
+import { CreateEventDialog } from "@/components/create-event-dialog"
+import type { CalendarEvent, Creator, Batch } from "@/lib/types/database"
 import { HoverCard, HoverCardTrigger } from "@/components/ui/hover-card"
 import { Card, CardContent } from "@/components/ui/card"
 
@@ -15,6 +16,8 @@ interface EventWithDetails extends CalendarEvent {
   content: { hook: string } | null
   batch: { name: string } | null
   event_team_members: Array<{ user_id: string; user_profiles: { first_name: string; last_name: string } }>
+  category?: string
+  location?: string
 }
 
 export default function WeeklyViewPage() {
@@ -24,6 +27,8 @@ export default function WeeklyViewPage() {
   const [user, setUser] = useState<any>(null)
   const [workspaceId, setWorkspaceId] = useState<string>("")
   const [events, setEvents] = useState<EventWithDetails[]>([])
+  const [creators, setCreators] = useState<Creator[]>([])
+  const [batches, setBatches] = useState<Batch[]>([])
   const [weekStart, setWeekStart] = useState<Date>(() => {
     const dateParam = searchParams.get("date")
     if (dateParam) {
@@ -71,14 +76,34 @@ export default function WeeklyViewPage() {
     }
 
     setWorkspaceId(membership.workspace_id)
+
+    // Load creators and batches
+    const [creatorsRes, batchesRes] = await Promise.all([
+      supabase
+        .from("creators")
+        .select("*")
+        .eq("workspace_id", membership.workspace_id)
+        .order("name"),
+      supabase
+        .from("batches")
+        .select("*")
+        .eq("workspace_id", membership.workspace_id)
+        .order("created_at", { ascending: false }),
+    ])
+
+    if (creatorsRes.data) setCreators(creatorsRes.data)
+    if (batchesRes.data) setBatches(batchesRes.data)
   }
 
   const loadEvents = async () => {
     const workspaceId = await getWorkspaceId()
     if (!workspaceId) return
 
+    // Include all events from start of weekStart to end of the following Sunday
     const weekEnd = new Date(weekStart)
-    weekEnd.setDate(weekStart.getDate() + 6)
+    weekEnd.setDate(weekStart.getDate() + 7) // Go to next Monday
+    weekEnd.setHours(0, 0, 0, 0) // Start of next Monday
+    weekEnd.setMilliseconds(-1) // End of Sunday
 
     const { data } = await supabase
       .from("calendar_events")
@@ -96,7 +121,7 @@ export default function WeeklyViewPage() {
       .order("start_time", { ascending: true })
 
     if (data) {
-      const userIds = data.flatMap((event) => event.event_team_members?.map((tm: any) => tm.user_id) || [])
+      const userIds = data.flatMap((event: any) => event.event_team_members?.map((tm: { user_id: string }) => tm.user_id) || [])
       const uniqueUserIds = [...new Set(userIds)]
 
       const { data: profiles } = await supabase
@@ -104,9 +129,9 @@ export default function WeeklyViewPage() {
         .select("id, first_name, last_name")
         .in("id", uniqueUserIds)
 
-      const profileMap = new Map(profiles?.map((p) => [p.id, p]) || [])
+      const profileMap = new Map(profiles?.map((p: { id: string; first_name: string; last_name: string }) => [p.id, p]) || [])
 
-      const eventsWithProfiles = data.map((event) => ({
+      const eventsWithProfiles = data.map((event: any) => ({
         ...event,
         event_team_members:
           event.event_team_members?.map((tm: any) => ({
@@ -127,6 +152,20 @@ export default function WeeklyViewPage() {
       .single()
 
     return membership?.workspace_id
+  }
+
+  const isCurrentWeek = () => {
+    const today = new Date()
+    const currentWeekStart = new Date(today)
+    const day = today.getDay()
+    const diff = today.getDate() - day + (day === 0 ? -6 : 1)
+    currentWeekStart.setDate(diff)
+    currentWeekStart.setHours(0, 0, 0, 0)
+
+    const weekStartMidnight = new Date(weekStart)
+    weekStartMidnight.setHours(0, 0, 0, 0)
+
+    return currentWeekStart.getTime() === weekStartMidnight.getTime()
   }
 
   const getEventsForDate = (date: Date) => {
@@ -178,68 +217,96 @@ export default function WeeklyViewPage() {
       <AppNav userEmail={user?.email} />
 
       <main className="container mx-auto p-6 space-y-8 flex-1">
-        <div className="flex items-center gap-4">
-          <Button
-            className="bg-accent text-accent-foreground hover:bg-accent/90"
-            onClick={() => router.push("/dashboard")}
-          >
-            <ArrowLeft className="size-4 mr-2" />
-            Back to Month View
-          </Button>
+        <div className="flex flex-col gap-4">
+          {/* Desktop: Back to Month View + Create Event buttons */}
+          <div className="hidden sm:flex items-center justify-between">
+            <Button
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
+              onClick={() => router.push("/dashboard")}
+            >
+              <ArrowLeft className="size-4 mr-2" />
+              Back to Month View
+            </Button>
 
-          <div className="flex items-center gap-4 flex-1 justify-center">
-            <Button variant="outline" size="icon" onClick={previousWeek}>
-              <ChevronLeft className="size-4" />
-            </Button>
-            <h1 className="text-3xl font-bold">
-              Week of {weekStart.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
-            </h1>
-            <Button variant="outline" size="icon" onClick={nextWeek}>
-              <ChevronRight className="size-4" />
-            </Button>
+            <CreateEventDialog
+              workspaceId={workspaceId}
+              creators={creators}
+              batches={batches}
+              onEventCreated={() => loadEvents()}
+              trigger={<Button className="bg-accent text-accent-foreground hover:bg-accent/90"><Plus className="size-4 mr-2" />Create</Button>}
+            />
+          </div>
+
+          {/* Mobile + Desktop: Week navigation with Create Event button on same row */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 sm:gap-4 flex-1">
+              <Button variant="outline" size="icon" onClick={previousWeek}>
+                <ChevronLeft className="size-4" />
+              </Button>
+              <h1 className="text-lg sm:text-3xl font-bold text-center flex-1">
+                {isCurrentWeek() ? "This Week" : `Week of ${weekStart.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}`}
+              </h1>
+              <Button variant="outline" size="icon" onClick={nextWeek}>
+                <ChevronRight className="size-4" />
+              </Button>
+            </div>
+
+            {/* Mobile: Create Event button on the right */}
+            <div className="sm:hidden ml-4">
+              <CreateEventDialog
+                workspaceId={workspaceId}
+                creators={creators}
+                batches={batches}
+                onEventCreated={() => loadEvents()}
+                trigger={<Button size="sm" className="bg-accent text-accent-foreground hover:bg-accent/90"><Plus className="size-4 mr-2" />Create</Button>}
+              />
+            </div>
           </div>
         </div>
 
-        <Card>
-          <CardContent className="p-6 space-y-6">
-            {weekDays.map((day) => {
-              const dayEvents = getEventsForDate(day)
-              const isPast = day < new Date(new Date().setHours(0, 0, 0, 0))
-              const isToday =
-                day.getDate() === new Date().getDate() &&
-                day.getMonth() === new Date().getMonth() &&
-                day.getFullYear() === new Date().getFullYear()
+        <div className="space-y-4">
+          {weekDays.map((day) => {
+            const dayEvents = getEventsForDate(day)
+            const isPast = day < new Date(new Date().setHours(0, 0, 0, 0))
+            const isToday =
+              day.getDate() === new Date().getDate() &&
+              day.getMonth() === new Date().getMonth() &&
+              day.getFullYear() === new Date().getFullYear()
+            const isFuture = !isPast && !isToday
 
-              return (
-                <div key={day.toISOString()} className="space-y-3">
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={`flex items-center gap-2 ${
-                        isToday ? "text-accent-dark font-semibold" : isPast ? "text-muted-foreground opacity-60" : ""
-                      }`}
-                    >
-                      <Calendar className="size-4" />
-                      <h3 className="text-lg font-medium">
-                        {day.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}
-                      </h3>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => router.push(`/dashboard/daily?date=${day.toISOString()}`)}
-                    >
-                      View Day <ChevronRight className="size-4 ml-1" />
-                    </Button>
+            return (
+              <Card
+                key={day.toISOString()}
+                className={`transition-all duration-200 cursor-pointer py-0 ${
+                  isToday
+                    ? "border-2 ring-2 bg-accent/30 border-accent ring-accent/40 hover:bg-accent/40"
+                    : isPast
+                      ? "bg-white/60 border border-muted-foreground/20 opacity-60 hover:opacity-80"
+                      : "bg-white border border-border hover:bg-accent"
+                }`}
+                onClick={() => router.push(`/dashboard/daily?date=${day.toISOString()}`)}
+              >
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3 mb-3">
+                    <Calendar className="size-5" />
+                    <h3 className={`text-lg sm:text-xl font-medium ${
+                      isToday ? "text-accent-dark font-semibold" : isPast ? "text-muted-foreground opacity-60" : ""
+                    }`}>
+                      {day.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
+                    </h3>
                   </div>
 
                   {dayEvents.length === 0 ? (
-                    <p className={`text-sm ${isPast ? "text-muted-foreground opacity-60" : "text-muted-foreground"}`}>
-                      No events scheduled
-                    </p>
+                    <div className="text-center py-6">
+                      <Calendar className="size-12 mx-auto text-muted-foreground/50 mb-2" />
+                      <p className={`text-base ${isPast ? "text-muted-foreground opacity-60" : "text-muted-foreground"}`}>
+                        No events scheduled
+                      </p>
+                    </div>
                   ) : (
-                    <div className="space-y-2">
+                    <div className="grid gap-2">
                       {dayEvents.map((event) => {
-                        const colors = getCategoryColor(event.category)
+                        const colors = getCategoryColor(event.category || 'meeting')
                         const eventDate = new Date(event.start_time)
                         const endDate = new Date(event.end_time)
                         const eventIsPast = endDate < new Date()
@@ -248,24 +315,62 @@ export default function WeeklyViewPage() {
                           <HoverCard key={event.id} openDelay={200}>
                             <HoverCardTrigger asChild>
                               <div
-                                className={`p-3 rounded-md border cursor-pointer hover:shadow-sm transition-shadow ${
+                                className={`p-4 rounded-lg border cursor-pointer hover:shadow-md transition-all duration-200 relative ${
                                   colors.bg
-                                } ${colors.border} ${eventIsPast ? "opacity-50" : ""}`}
+                                } ${colors.border} ${eventIsPast ? "opacity-60" : ""} hover:scale-[1.02]`}
                                 onClick={() => {
                                   setEditingEvent(event)
                                   setShowEditEventDialog(true)
                                 }}
                               >
-                                <div className="flex items-center gap-2 text-sm">
-                                  <Clock className="size-4" />
-                                  <span className={eventIsPast ? "line-through" : ""}>
-                                    {eventDate.toLocaleTimeString("en-US", {
-                                      hour: "numeric",
-                                      minute: "2-digit",
-                                      hour12: true,
-                                    })}{" "}
-                                    | <span className="font-semibold">{event.title}</span>
+                                {/* Category badge - top right */}
+                                <div className="absolute top-2 right-2">
+                                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${colors.bg} ${colors.text} ${colors.border}`}>
+                                    {event.category || 'meeting'}
                                   </span>
+                                </div>
+
+                                <div className="pr-20">
+                                  {/* Time row */}
+                                  <div className="flex items-center gap-1.5 mb-2">
+                                    <Clock className="size-4 text-muted-foreground" />
+                                    <span className={`text-sm font-medium ${eventIsPast ? "line-through" : ""}`}>
+                                      {eventDate.toLocaleTimeString("en-US", {
+                                        hour: "numeric",
+                                        minute: "2-digit",
+                                        hour12: true,
+                                      })}
+                                      {event.end_time && (
+                                        <span className="text-muted-foreground">
+                                          {" - "}
+                                          {new Date(event.end_time).toLocaleTimeString("en-US", {
+                                            hour: "numeric",
+                                            minute: "2-digit",
+                                            hour12: true,
+                                          })}
+                                        </span>
+                                      )}
+                                    </span>
+                                  </div>
+
+                                  {/* Title and Description row */}
+                                  <div className="mb-1">
+                                    <span className={`font-bold text-base ${eventIsPast ? "line-through" : ""}`}>
+                                      {event.title}
+                                    </span>
+                                    {event.description && (
+                                      <span className="text-sm text-muted-foreground ml-2">
+                                        : {event.description}
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {/* Location row */}
+                                  {event.location && (
+                                    <div className="text-sm text-muted-foreground">
+                                      📍 {event.location}
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             </HoverCardTrigger>
@@ -275,11 +380,11 @@ export default function WeeklyViewPage() {
                       })}
                     </div>
                   )}
-                </div>
-              )
-            })}
-          </CardContent>
-        </Card>
+                </CardContent>
+              </Card>
+            )
+          })}
+        </div>
       </main>
 
       <Footer />

@@ -8,7 +8,8 @@ import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Button } from "@/components/ui/button"
 import { UserAvatar } from "@/components/user-avatar"
-import { Plus, Crown, Activity, TrendingUp, Calendar, FileText, Search, Code } from "lucide-react"
+import { Plus, Crown, Activity, TrendingUp, Calendar, FileText, Search, Code, Copy, Check } from "lucide-react"
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, LineChart, Line } from "recharts"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
@@ -23,7 +24,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { upgradeWorkspaceType } from "@/app/actions/workspace"
+import { upgradeWorkspaceType, generateReferralCodes, getWorkspaceMembersWithEmails } from "@/app/actions/workspace"
 import { useToast } from "@/hooks/use-toast"
 
 export default function TeamPage() {
@@ -33,12 +34,12 @@ export default function TeamPage() {
   const [members, setMembers] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [workspace, setWorkspace] = useState<any>(null)
-  const [showInviteDialog, setShowInviteDialog] = useState(false)
   const [showUpgradeDialog, setShowUpgradeDialog] = useState(false)
-  const [inviteEmail, setInviteEmail] = useState("")
-  const [inviteRole, setInviteRole] = useState("team_member")
-  const [isInviting, setIsInviting] = useState(false)
   const [isUpgrading, setIsUpgrading] = useState(false)
+  const [referralCodes, setReferralCodes] = useState<Array<{ role: string; referral_code: string }>>([])
+  const [copiedCode, setCopiedCode] = useState<string | null>(null)
+  const [isGeneratingCodes, setIsGeneratingCodes] = useState(false)
+  const [showReferralCodesDialog, setShowReferralCodesDialog] = useState(false)
   
   // Analytics state
   const [analyticsData, setAnalyticsData] = useState<any>(null)
@@ -85,14 +86,43 @@ export default function TeamPage() {
       console.log("[v0] Loaded workspace for team:", workspaceData)
       setWorkspace(workspaceData)
 
-      const { data: membersData } = await supabase
-        .from("workspace_members")
-        .select("*, user_profiles(first_name, last_name, email, avatar_type, avatar_bg_color, avatar_text_color, avatar_storage_path)")
+      // Use server action to get members with emails properly populated
+      const membersResult = await getWorkspaceMembersWithEmails(membership.workspace_id)
+      
+      let membersList: any[] = []
+      if (membersResult.error) {
+        console.error("[v0] Error loading members:", membersResult.error)
+        // Fallback to client-side query
+        const { data: membersData } = await supabase
+          .from("workspace_members")
+          .select("*, user_profiles(first_name, last_name, email, avatar_type, avatar_bg_color, avatar_text_color, avatar_storage_path)")
+          .eq("workspace_id", membership.workspace_id)
+          .order("created_at")
+        
+        // Enhance current user's email if missing
+        membersList = (membersData || []).map((member: any) => {
+          if (!member.user_profiles?.email && member.user_id === authUser.id && authUser.email) {
+            if (!member.user_profiles) {
+              member.user_profiles = {}
+            }
+            member.user_profiles.email = authUser.email
+          }
+          return member
+        })
+        setMembers(membersList)
+      } else {
+        membersList = membersResult.data || []
+        setMembers(membersList)
+      }
+      
+      // Load referral codes
+      const { data: referralCodesData } = await supabase
+        .from("workspace_referral_codes")
+        .select("role, referral_code")
         .eq("workspace_id", membership.workspace_id)
-        .order("created_at")
-
-      const membersList = membersData || []
-      setMembers(membersList)
+        .order("role")
+      
+      setReferralCodes(referralCodesData || [])
       
       // Load analytics data
       await loadAnalytics(membership.workspace_id, membersList)
@@ -298,29 +328,73 @@ export default function TeamPage() {
     }
   }
 
-  function handleAddTeamMember() {
-    console.log("[v0] Workspace type for team:", workspace?.type)
-    if (workspace?.type === "personal_creator") {
-      console.log("[v0] Personal creator - showing upgrade dialog")
-      setShowUpgradeDialog(true)
-      return
+  function handleCopyCode(code: string) {
+    navigator.clipboard.writeText(code)
+    setCopiedCode(code)
+    setTimeout(() => setCopiedCode(null), 2000)
+  }
+
+  async function handleGenerateReferralCodes() {
+    if (!workspace?.id) return
+    
+    setIsGeneratingCodes(true)
+
+    try {
+      const result = await generateReferralCodes(workspace.id)
+
+      if (result?.error) {
+        toast({
+          title: "Error",
+          description: result.error,
+          variant: "destructive",
+        })
+      } else {
+        // Reload referral codes
+        const supabase = createClient()
+        const { data: membership } = await supabase
+          .from("workspace_members")
+          .select("workspace_id")
+          .eq("user_id", user?.id)
+          .single()
+
+        if (membership) {
+          const { data: referralCodesData } = await supabase
+            .from("workspace_referral_codes")
+            .select("role, referral_code")
+            .eq("workspace_id", membership.workspace_id)
+            .order("role")
+          
+          setReferralCodes(referralCodesData || [])
+          
+          toast({
+            title: "Success",
+            description: "Referral codes generated successfully!",
+          })
+        }
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to generate referral codes",
+        variant: "destructive",
+      })
+    } finally {
+      setIsGeneratingCodes(false)
     }
-    console.log("[v0] Not personal creator - showing invite dialog")
-    setShowInviteDialog(true)
   }
 
   async function handleUpgrade() {
     console.log("[v0] Starting workspace upgrade to manager_of_creators...")
     setIsUpgrading(true)
 
-    const result = await upgradeWorkspaceType(workspace.id, "manager_of_creators")
+    const result = await upgradeWorkspaceType(workspace.id, "manager")
 
     if (result.error) {
       console.error("[v0] Error upgrading workspace:", result.error)
       alert(`Failed to upgrade: ${result.error}`)
     } else {
-      console.log("[v0] Workspace upgraded successfully to manager_of_creators")
-      setWorkspace({ ...workspace, type: "manager_of_creators" })
+      console.log("[v0] Workspace upgraded successfully to manager")
+      setWorkspace({ ...workspace, type: "manager" })
       setShowUpgradeDialog(false)
       toast({
         title: "Workspace upgraded successfully!",
@@ -332,17 +406,7 @@ export default function TeamPage() {
     setIsUpgrading(false)
   }
 
-  async function handleInvite() {
-    if (!inviteEmail) return
-    setIsInviting(true)
-
-    console.log("[v0] Inviting:", inviteEmail, inviteRole)
-
-    setIsInviting(false)
-    setShowInviteDialog(false)
-    setInviteEmail("")
-    setInviteRole("team_member")
-  }
+  // handleInvite removed - using referral codes instead
   
   // Helper function to group timestamp into hourly bucket
   const getHourlyBucket = (timestamp: Date): string => {
@@ -978,11 +1042,17 @@ export default function TeamPage() {
           <div className="flex items-center justify-between">
             <h2 className="text-2xl font-semibold">Team Members</h2>
             <Button
-              onClick={handleAddTeamMember}
+              onClick={() => {
+                if (workspace?.type === "personal_creator") {
+                  setShowUpgradeDialog(true)
+                } else {
+                  setShowReferralCodesDialog(true)
+                }
+              }}
               className="bg-accent text-accent-foreground hover:bg-accent/90 border-accent"
             >
               <Plus className="size-4 mr-2" />
-              Add Team Member
+              Add Member
             </Button>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -1003,7 +1073,7 @@ export default function TeamPage() {
                     <p className="font-medium text-base">
                       {member.user_profiles?.first_name && member.user_profiles?.last_name
                         ? `${member.user_profiles.first_name} ${member.user_profiles.last_name}`
-                        : member.user_profiles?.email || "Unknown User"}
+                        : member.user_profiles?.email || (user?.id === member.user_id ? user?.email : "Unknown User")}
                     </p>
                   </div>
                   <Badge variant="outline" className="capitalize">
@@ -1038,7 +1108,7 @@ export default function TeamPage() {
                       <SelectItem key={member.id} value={member.user_id}>
                         {member.user_profiles?.first_name && member.user_profiles?.last_name
                           ? `${member.user_profiles.first_name} ${member.user_profiles.last_name}`
-                          : member.user_profiles?.email || "Unknown User"}
+                          : member.user_profiles?.email || (user?.id === member.user_id ? user?.email : "Unknown User")}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -1257,7 +1327,7 @@ export default function TeamPage() {
                       <SelectItem key={member.id} value={member.user_id}>
                         {member.user_profiles?.first_name && member.user_profiles?.last_name
                           ? `${member.user_profiles.first_name} ${member.user_profiles.last_name}`
-                          : member.user_profiles?.email || "Unknown User"}
+                          : member.user_profiles?.email || (user?.id === member.user_id ? user?.email : "Unknown User")}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -1291,6 +1361,84 @@ export default function TeamPage() {
           </div>
         )}
       </main>
+
+      {/* Referral Codes Dialog */}
+      <Dialog open={showReferralCodesDialog} onOpenChange={setShowReferralCodesDialog}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>Team Member Referral Codes</DialogTitle>
+            <DialogDescription>
+              Share these codes with team members. They'll use the code when signing up to join your workspace.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {referralCodes.filter((code) => code.role !== "owner" && code.role !== "creator").length > 0 ? (
+              <Accordion type="single" collapsible className="w-full">
+                {referralCodes
+                  .filter((code) => code.role !== "owner" && code.role !== "creator")
+                  .map((refCode) => (
+                    <AccordionItem key={refCode.role} value={refCode.role} className="border-none">
+                      <AccordionTrigger className="capitalize hover:no-underline">
+                        {refCode.role}
+                      </AccordionTrigger>
+                      <AccordionContent className="pt-2">
+                        <div className="flex items-center gap-2 p-3 bg-accent/10 border border-accent/20 rounded-lg">
+                          <code className="flex-1 font-mono text-sm font-semibold text-accent bg-background px-3 py-2 rounded border border-accent/30">
+                            {refCode.referral_code}
+                          </code>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleCopyCode(refCode.referral_code)}
+                            className="h-9 w-9 p-0 hover:bg-accent/20"
+                          >
+                            {copiedCode === refCode.referral_code ? (
+                              <Check className="size-4 text-green-600 dark:text-green-400" />
+                            ) : (
+                              <Copy className="size-4 text-muted-foreground" />
+                            )}
+                          </Button>
+                        </div>
+                      </AccordionContent>
+                    </AccordionItem>
+                  ))}
+              </Accordion>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  Referral codes haven't been generated yet for this workspace.
+                </p>
+                <Button
+                  onClick={async () => {
+                    await handleGenerateReferralCodes()
+                    // Reload referral codes after generation
+                    const supabase = createClient()
+                    const { data: membership } = await supabase
+                      .from("workspace_members")
+                      .select("workspace_id")
+                      .eq("user_id", user?.id)
+                      .single()
+
+                    if (membership) {
+                      const { data: referralCodesData } = await supabase
+                        .from("workspace_referral_codes")
+                        .select("role, referral_code")
+                        .eq("workspace_id", membership.workspace_id)
+                        .order("role")
+                      
+                      setReferralCodes(referralCodesData || [])
+                    }
+                  }}
+                  disabled={isGeneratingCodes}
+                  className="bg-accent text-accent-foreground hover:bg-accent/90"
+                >
+                  {isGeneratingCodes ? "Generating..." : "Generate Referral Codes"}
+                </Button>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={showUpgradeDialog} onOpenChange={setShowUpgradeDialog}>
         <DialogContent className="sm:max-w-md">
@@ -1332,51 +1480,6 @@ export default function TeamPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={showInviteDialog} onOpenChange={setShowInviteDialog}>
-        <DialogContent className="bg-white">
-          <DialogHeader>
-            <DialogTitle>Invite Team Member</DialogTitle>
-            <DialogDescription>Send an email invitation to add a new team member to your workspace.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="email">Email Address</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="colleague@example.com"
-                value={inviteEmail}
-                onChange={(e) => setInviteEmail(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="role">Role</Label>
-              <Select value={inviteRole} onValueChange={setInviteRole}>
-                <SelectTrigger id="role">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="team_member">Team Member</SelectItem>
-                  <SelectItem value="manager">Manager</SelectItem>
-                  {workspace?.type !== "personal_creator" && <SelectItem value="creator">Creator</SelectItem>}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowInviteDialog(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleInvite}
-              disabled={!inviteEmail || isInviting}
-              className="bg-accent text-accent-foreground hover:bg-accent/90"
-            >
-              {isInviting ? "Sending..." : "Send Invite"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </>
   )
 }

@@ -1,6 +1,6 @@
 "use client"
 
-import { Dialog, DialogContent } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { Footer } from "@/components/footer"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -14,9 +14,9 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
-import { Users, Building2, User, Plus, X, Save, Trash2, Copy, GripVertical } from "lucide-react"
-import { updateWorkspace, deleteWorkspace } from "@/app/actions/workspace"
-import type { Platform, WorkspaceType } from "@/types" // Import Platform and WorkspaceType
+import { Users, Building2, User, Plus, X, Save, Trash2, Copy, GripVertical, Code, Check } from "lucide-react"
+import { updateWorkspace, deleteWorkspace, generateReferralCodes } from "@/app/actions/workspace"
+import type { Platform, WorkspaceType } from "@/lib/types/database"
 
 export default function SettingsPage() {
   const router = useRouter()
@@ -36,7 +36,9 @@ export default function SettingsPage() {
   const [teamMembers, setTeamMembers] = useState<any[]>([])
   const [platforms, setPlatforms] = useState<Platform[]>([])
   const [currentCreatorIndex, setCurrentCreatorIndex] = useState(0)
-  const [teamInvites, setTeamInvites] = useState<any[]>([])
+  const [referralCodes, setReferralCodes] = useState<Array<{ role: string; referral_code: string }>>([])
+  const [copiedCode, setCopiedCode] = useState<string | null>(null)
+  const [isGeneratingCodes, setIsGeneratingCodes] = useState(false)
 
   const [postingFrequency, setPostingFrequency] = useState(7)
   const [activeContentTypes, setActiveContentTypes] = useState<typeof allContentTypes>([])
@@ -78,8 +80,7 @@ export default function SettingsPage() {
       JSON.stringify(editCreators) !== JSON.stringify(initialState.editCreators) ||
       JSON.stringify(selectedPlatforms) !== JSON.stringify(initialState.selectedPlatforms) ||
       postingFrequency !== initialState.postingFrequency ||
-      JSON.stringify(activeContentTypes) !== JSON.stringify(initialState.activeContentTypes) ||
-      teamInvites.length > 0
+      JSON.stringify(activeContentTypes) !== JSON.stringify(initialState.activeContentTypes)
 
     setHasChanges(changed)
   }, [
@@ -90,7 +91,6 @@ export default function SettingsPage() {
     selectedPlatforms,
     postingFrequency,
     activeContentTypes,
-    teamInvites,
     initialState,
     isEditing,
   ])
@@ -167,6 +167,15 @@ export default function SettingsPage() {
         setTeamMembers(teamMembersData)
       }
 
+      // Load referral codes
+      const { data: referralCodesData } = await supabase
+        .from("workspace_referral_codes")
+        .select("role, referral_code")
+        .eq("workspace_id", membershipData.workspaces.id)
+        .order("role")
+      
+      setReferralCodes(referralCodesData || [])
+
       const { data: platformsData } = await supabase.from("platforms").select("*").order("name")
       if (platformsData) setPlatforms(platformsData)
     } catch (err) {
@@ -220,18 +229,32 @@ export default function SettingsPage() {
     })
   }
 
-  const addInvite = () => {
-    setTeamInvites([...teamInvites, { firstName: "", lastName: "", email: "", role: "viewer" }])
+  function handleCopyCode(code: string) {
+    navigator.clipboard.writeText(code)
+    setCopiedCode(code)
+    setTimeout(() => setCopiedCode(null), 2000)
   }
 
-  const removeInvite = (index: number) => {
-    setTeamInvites(teamInvites.filter((_, i) => i !== index))
-  }
+  const handleGenerateReferralCodes = async () => {
+    if (!workspace?.id) return
+    
+    setIsGeneratingCodes(true)
+    setError(null)
 
-  const updateInvite = (index: number, field: string, value: any) => {
-    const newInvites = [...teamInvites]
-    newInvites[index][field] = value
-    setTeamInvites(newInvites)
+    try {
+      const result = await generateReferralCodes(workspace.id)
+
+      if (result?.error) {
+        throw new Error(result.error)
+      }
+
+      // Reload data to show the new codes
+      await loadData()
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setIsGeneratingCodes(false)
+    }
   }
 
   const handleStartEdit = () => {
@@ -268,12 +291,6 @@ export default function SettingsPage() {
           type: workspaceType,
         },
         creators: creatorsData,
-        teamInvites: teamInvites,
-        // Add content framework to save
-        contentFramework: {
-          postingFrequency: postingFrequency,
-          activeContentTypes: activeContentTypes.map((item) => item.id), // Save only IDs
-        },
       })
 
       if (result?.error) {
@@ -892,62 +909,56 @@ export default function SettingsPage() {
                     </div>
 
                     <div className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <h3 className="font-semibold">Invite Team Members</h3>
-                        <Button variant="outline" size="sm" onClick={addInvite}>
-                          <Plus className="size-3 mr-1" />
-                          Add Invite
-                        </Button>
+                      <div className="p-4 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg">
+                        <h4 className="font-semibold text-blue-900 dark:text-blue-100 mb-2">
+                          Team Member Referral Codes
+                        </h4>
+                        <p className="text-sm text-blue-800 dark:text-blue-200">
+                          Share these codes with team members. They'll use the code when signing up to join your workspace.
+                        </p>
                       </div>
-
-                      {teamInvites.map((invite, idx) => (
-                        <Card key={idx} className="p-4 space-y-4">
-                          <div className="flex items-start justify-between">
-                            <div className="grid grid-cols-2 gap-3 flex-1">
-                              <div className="space-y-2">
-                                <Label>First Name</Label>
-                                <Input
-                                  value={invite.firstName}
-                                  onChange={(e) => updateInvite(idx, "firstName", e.target.value)}
-                                />
+                      
+                      {referralCodes.length > 0 ? (
+                        <div className="space-y-3">
+                          {referralCodes.map((refCode) => (
+                            <div key={refCode.role} className="flex items-center justify-between p-3 border rounded-lg">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-semibold capitalize">{refCode.role}</span>
+                                  <Badge variant="outline" className="font-mono text-xs">
+                                    {refCode.referral_code}
+                                  </Badge>
+                                </div>
                               </div>
-                              <div className="space-y-2">
-                                <Label>Last Name</Label>
-                                <Input
-                                  value={invite.lastName}
-                                  onChange={(e) => updateInvite(idx, "lastName", e.target.value)}
-                                />
-                              </div>
-                              <div className="space-y-2">
-                                <Label>Email</Label>
-                                <Input
-                                  type="email"
-                                  value={invite.email}
-                                  onChange={(e) => updateInvite(idx, "email", e.target.value)}
-                                />
-                              </div>
-                              <div className="space-y-2">
-                                <Label>Role</Label>
-                                <Select value={invite.role} onValueChange={(value) => updateInvite(idx, "role", value)}>
-                                  <SelectTrigger>
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {workspaceType !== "personal_creator" && (
-                                      <SelectItem value="creator">Creator</SelectItem>
-                                    )}
-                                    <SelectItem value="editor">Editor</SelectItem>
-                                    <SelectItem value="viewer">Viewer</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              </div>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleCopyCode(refCode.referral_code)}
+                                className="ml-2"
+                              >
+                                {copiedCode === refCode.referral_code ? (
+                                  <Check className="size-4 text-green-500" />
+                                ) : (
+                                  <Copy className="size-4" />
+                                )}
+                              </Button>
                             </div>
-                            <Button variant="ghost" size="icon" onClick={() => removeInvite(idx)}>
-                              <X className="size-4" />
-                            </Button>
-                          </div>
-                        </Card>
-                      ))}
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          <p className="text-sm text-muted-foreground">
+                            Referral codes haven't been generated yet for this workspace.
+                          </p>
+                          <Button
+                            onClick={handleGenerateReferralCodes}
+                            disabled={isGeneratingCodes}
+                            className="bg-accent text-accent-foreground hover:bg-accent/90"
+                          >
+                            {isGeneratingCodes ? "Generating..." : "Generate Referral Codes"}
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   </>
                 )}
@@ -1033,6 +1044,12 @@ export default function SettingsPage() {
 
         <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
           <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Delete Workspace</DialogTitle>
+              <DialogDescription>
+                This action cannot be undone. This will permanently delete your workspace and all associated data.
+              </DialogDescription>
+            </DialogHeader>
             <div className="flex flex-col space-y-4 py-4">
               <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 space-y-3">
                 <p className="text-sm font-semibold text-destructive">⚠️ This will remove access for the following:</p>

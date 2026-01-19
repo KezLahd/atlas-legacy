@@ -339,19 +339,19 @@ export default function DailyViewPage() {
       <main className="container mx-auto p-6 space-y-6 flex-1">
         <div className="flex items-center gap-4">
           <Button
-            variant="secondary"
-            onClick={() => router.push("/dashboard")}
-            className="hover:bg-secondary/80 transition-colors"
+            variant="ghost"
+            size="icon"
+            onClick={() => router.push(`/dashboard/weekly?date=${selectedDate.toISOString()}`)}
+            className="text-muted-foreground hover:text-foreground"
           >
-            <ArrowLeft className="size-4 mr-2" />
-            Back to Month View
+            <ArrowLeft className="size-5" />
           </Button>
 
           <div className="flex items-center gap-4 flex-1 justify-center">
             <Button variant="outline" size="icon" onClick={previousDay}>
               <ChevronLeft className="size-4" />
             </Button>
-            <h1 className="text-3xl font-bold">
+            <h1 className="text-lg sm:text-3xl font-bold">
               {isToday
                 ? "Today"
                 : selectedDate.toLocaleDateString("en-US", {
@@ -371,7 +371,7 @@ export default function DailyViewPage() {
             onClick={() => setShowCreateEventDialog(true)}
           >
             <Plus className="size-4 mr-2" />
-            Create Event
+            Create
           </Button>
         </div>
 

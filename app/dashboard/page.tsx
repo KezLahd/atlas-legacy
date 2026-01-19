@@ -3,12 +3,21 @@
 import type React from "react"
 
 import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { AppNav } from "@/components/app-nav"
 import { Footer } from "@/components/footer"
 import { Button } from "@/components/ui/button"
-import { ChevronLeft, ChevronRight, ChevronDown, ChevronUp } from "lucide-react"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
+import { ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Copy, Check } from "lucide-react"
 import { CreateEventDialog } from "@/components/create-event-dialog"
 import { EditEventDialog } from "@/components/edit-event-dialog"
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card"
@@ -22,6 +31,7 @@ interface EventWithDetails extends CalendarEvent {
 
 export default function DashboardPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const supabase = createClient()
   const [user, setUser] = useState<any>(null)
   const [workspaceId, setWorkspaceId] = useState<string>("")
@@ -34,9 +44,19 @@ export default function DashboardPage() {
   const [expandedDays, setExpandedDays] = useState<Set<number>>(new Set())
   const [editingEvent, setEditingEvent] = useState<EventWithDetails | null>(null)
   const [showEditEventDialog, setShowEditEventDialog] = useState(false)
+  const [showReferralCodesDialog, setShowReferralCodesDialog] = useState(false)
+  const [referralCodes, setReferralCodes] = useState<Array<{ role: string; referral_code: string }>>([])
+  const [copiedCode, setCopiedCode] = useState<string | null>(null)
+  const [referralCodeView, setReferralCodeView] = useState<"team" | "creator">("team")
 
   useEffect(() => {
     loadData()
+    // Redirect to weekly view on mobile screens
+    const isMobile = window.innerWidth < 768
+    if (isMobile) {
+      const today = new Date()
+      router.push(`/dashboard/weekly?date=${today.toISOString()}`)
+    }
   }, [])
 
   useEffect(() => {
@@ -44,6 +64,44 @@ export default function DashboardPage() {
       loadEvents()
     }
   }, [workspaceId, currentDate])
+
+  useEffect(() => {
+    // Check if we should show referral codes dialog
+    const showCodes = searchParams.get("showReferralCodes")
+    if (showCodes === "true" && workspaceId) {
+      loadReferralCodes()
+      // Remove query parameter from URL
+      router.replace("/dashboard", { scroll: false })
+    }
+  }, [workspaceId, searchParams, router])
+
+  const loadReferralCodes = async () => {
+    if (!workspaceId) return
+    
+    // Wait a moment for referral codes to be generated
+    await new Promise((resolve) => setTimeout(resolve, 500))
+    
+    const { data: codesData } = await supabase
+      .from("workspace_referral_codes")
+      .select("role, referral_code")
+      .eq("workspace_id", workspaceId)
+      .order("role")
+
+    if (codesData && codesData.length > 0) {
+      setReferralCodes(codesData)
+      setShowReferralCodesDialog(true)
+    }
+  }
+
+  const handleCopyCode = (code: string) => {
+    navigator.clipboard.writeText(code)
+    setCopiedCode(code)
+    setTimeout(() => setCopiedCode(null), 2000)
+  }
+
+  const handleCloseReferralCodesDialog = () => {
+    setShowReferralCodesDialog(false)
+  }
 
   const loadData = async () => {
     const {
@@ -513,6 +571,110 @@ export default function DashboardPage() {
           onEventUpdated={() => loadEvents()}
         />
       )}
+
+      {/* Referral Codes Dialog for Team/Manager */}
+      <Dialog open={showReferralCodesDialog} onOpenChange={setShowReferralCodesDialog}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>
+              {referralCodeView === "team" ? "Team Member Referral Codes" : "Creator Referral Code"}
+            </DialogTitle>
+            <DialogDescription>
+              {referralCodeView === "team"
+                ? "Share these codes with your team members. They'll use them when signing up to join your workspace."
+                : "Share this code with creators. They'll use it when signing up to join your workspace as a creator."}
+            </DialogDescription>
+          </DialogHeader>
+          
+          {/* Toggle between Team and Creator */}
+          <div className="flex items-center gap-2 p-1 bg-muted rounded-lg">
+            <Button
+              variant={referralCodeView === "team" ? "default" : "ghost"}
+              size="sm"
+              onClick={() => setReferralCodeView("team")}
+              className="flex-1"
+            >
+              Team Members
+            </Button>
+            <Button
+              variant={referralCodeView === "creator" ? "default" : "ghost"}
+              size="sm"
+              onClick={() => setReferralCodeView("creator")}
+              className="flex-1"
+            >
+              Creator
+            </Button>
+          </div>
+
+          <div className="space-y-4 py-4">
+            {referralCodes.length > 0 ? (
+              referralCodeView === "team" ? (
+                <Accordion type="single" collapsible className="w-full">
+                  {referralCodes
+                    .filter((code) => code.role !== "owner" && code.role !== "creator")
+                    .map((refCode) => (
+                      <AccordionItem key={refCode.role} value={refCode.role} className="border-none">
+                        <AccordionTrigger className="capitalize hover:no-underline">
+                          {refCode.role}
+                        </AccordionTrigger>
+                        <AccordionContent className="pt-2">
+                          <div className="flex items-center gap-2 p-3 bg-accent/10 border border-accent/20 rounded-lg">
+                            <code className="flex-1 font-mono text-sm font-semibold text-accent bg-background px-3 py-2 rounded border border-accent/30">
+                              {refCode.referral_code}
+                            </code>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleCopyCode(refCode.referral_code)}
+                              className="h-9 w-9 p-0 hover:bg-accent/20"
+                            >
+                              {copiedCode === refCode.referral_code ? (
+                                <Check className="size-4 text-green-600 dark:text-green-400" />
+                              ) : (
+                                <Copy className="size-4 text-muted-foreground" />
+                              )}
+                            </Button>
+                          </div>
+                        </AccordionContent>
+                      </AccordionItem>
+                    ))}
+                </Accordion>
+              ) : (
+                referralCodes
+                  .filter((code) => code.role === "creator")
+                  .map((refCode) => (
+                    <div key={refCode.role} className="space-y-2">
+                      <div className="flex items-center gap-2 p-3 bg-accent/10 border border-accent/20 rounded-lg">
+                        <code className="flex-1 font-mono text-sm font-semibold text-accent bg-background px-3 py-2 rounded border border-accent/30">
+                          {refCode.referral_code}
+                        </code>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleCopyCode(refCode.referral_code)}
+                          className="h-9 w-9 p-0 hover:bg-accent/20"
+                        >
+                          {copiedCode === refCode.referral_code ? (
+                            <Check className="size-4 text-green-600 dark:text-green-400" />
+                          ) : (
+                            <Copy className="size-4 text-muted-foreground" />
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  ))
+              )
+            ) : (
+              <p className="text-sm text-muted-foreground">Loading referral codes...</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button onClick={handleCloseReferralCodesDialog} className="w-full">
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

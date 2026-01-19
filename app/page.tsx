@@ -1,7 +1,9 @@
 "use client"
 
 import Link from "next/link"
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
+import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select"
@@ -12,6 +14,30 @@ import { ChevronLeft, ChevronRight, ChevronDown, LayoutDashboard, FileText, Sear
 import { LineChart, ResponsiveContainer, CartesianGrid, XAxis, YAxis, Tooltip, Line } from "recharts"
 
 export default function LandingPage() {
+  const router = useRouter()
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
+
+  // Check authentication status
+  useEffect(() => {
+    const checkAuth = async () => {
+      const supabase = createClient()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      setIsLoggedIn(!!user)
+      setIsLoading(false)
+    }
+    checkAuth()
+  }, [])
+
+  const handleLogout = async () => {
+    const supabase = createClient()
+    await supabase.auth.signOut()
+    router.refresh()
+    setIsLoggedIn(false)
+  }
+
   // Research demo state
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedVirality, setSelectedVirality] = useState("all")
@@ -141,12 +167,25 @@ export default function LandingPage() {
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <AtlasLogo className="size-8" showText />
           <nav className="hidden md:flex items-center gap-6">
-            <Link href="/auth/login" className="text-sm text-muted-foreground hover:text-foreground">
-              Login
-            </Link>
-            <Button asChild className="bg-primary hover:bg-primary/90 text-primary-foreground">
-              <Link href="/auth/sign-up">Get Started</Link>
-            </Button>
+            {isLoggedIn ? (
+              <>
+                <Link href="/dashboard" className="text-sm text-muted-foreground hover:text-foreground">
+                  Dashboard
+                </Link>
+                <Button onClick={handleLogout} className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                  Log Out
+                </Button>
+              </>
+            ) : (
+              <>
+                <Link href="/auth/login" className="text-sm text-muted-foreground hover:text-foreground">
+                  Login
+                </Link>
+                <Button asChild className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                  <Link href="/auth/sign-up">Get Started</Link>
+                </Button>
+              </>
+            )}
           </nav>
         </div>
       </header>
@@ -162,12 +201,25 @@ export default function LandingPage() {
             personal brand content.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
-            <Button size="lg" asChild className="bg-primary hover:bg-primary/90 text-primary-foreground">
-              <Link href="/auth/sign-up">Get Started Free</Link>
-            </Button>
-            <Button size="lg" variant="outline" asChild className="border-muted bg-transparent">
-              <Link href="/auth/login">Learn More</Link>
-            </Button>
+            {isLoggedIn ? (
+              <>
+                <Button size="lg" asChild className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                  <Link href="/dashboard">Dashboard</Link>
+                </Button>
+                <Button size="lg" onClick={handleLogout} variant="outline" className="border-muted bg-transparent">
+                  Log Out
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button size="lg" asChild className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                  <Link href="/auth/sign-up">Get Started Free</Link>
+                </Button>
+                <Button size="lg" variant="outline" asChild className="border-muted bg-transparent">
+                  <Link href="/auth/login">Learn More</Link>
+                </Button>
+              </>
+            )}
           </div>
         </div>
       </section>
@@ -1469,9 +1521,15 @@ export default function LandingPage() {
               Join creators who are scaling their personal brands with Atlas.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
-              <Button size="lg" asChild className="bg-primary hover:bg-primary/90 text-primary-foreground">
-                <Link href="/auth/sign-up">Get Started Free</Link>
-              </Button>
+              {isLoggedIn ? (
+                <Button size="lg" onClick={handleLogout} className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                  Log Out
+                </Button>
+              ) : (
+                <Button size="lg" asChild className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                  <Link href="/auth/sign-up">Get Started Free</Link>
+                </Button>
+              )}
             </div>
           </div>
         </div>

@@ -7,6 +7,14 @@ CREATE TABLE IF NOT EXISTS content_types (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Enable RLS
+ALTER TABLE content_types ENABLE ROW LEVEL SECURITY;
+
+-- Allow public read access to content_types (it's a reference table)
+CREATE POLICY "Content types are viewable by everyone" ON content_types
+  FOR SELECT
+  USING (true);
+
 -- Insert the 7 content types from the @jun_yuh framework
 INSERT INTO content_types (id, name, description, icon) VALUES
   (1, 'Storytelling', 'Challenge → timestamps → readable text → rising sound. Themes: big goal, struggle, breakthrough, hero''s journey. Medium effort, 30–45s', '📖'),

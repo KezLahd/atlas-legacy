@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { createServiceClient } from "@/lib/supabase/service"
 import { redirect } from "next/navigation"
+import { revalidatePath } from "next/cache"
 
 export async function createWorkspaceWithCreators(data: {
   workspace: {
@@ -184,20 +185,278 @@ export async function createWorkspaceWithCreators(data: {
     }
   }
 
-  // Create team invitations
-  if (data.invitations.length > 0) {
-    await serviceSupabase.from("team_invitations").insert(
-      data.invitations.map((inv) => ({
+  // Generate referral codes for team member roles (excluding owner)
+  // Owner: only one per workspace, no referral code needed
+  // Creator: included for manager and team_agency workspaces (not personal_creator)
+  const roles: Array<"manager" | "editor" | "viewer" | "strategist" | "creator"> = [
+    "manager",
+    "editor",
+    "viewer",
+    "strategist",
+    ...(data.workspace.type !== "personal_creator" ? (["creator"] as const) : []),
+  ]
+
+  // Helper function to generate a random referral code
+  const generateReferralCode = () => {
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789" // Exclude confusing chars like 0, O, I, 1
+    let code = ""
+    for (let i = 0; i < 12; i++) {
+      code += chars.charAt(Math.floor(Math.random() * chars.length))
+    }
+    return code
+  }
+
+  // Generate unique referral codes for each role
+  const referralCodesData = []
+  for (const role of roles) {
+    let code: string
+    let isUnique = false
+    let attempts = 0
+    // Ensure uniqueness
+    while (!isUnique && attempts < 10) {
+      code = generateReferralCode()
+      const { data: existing } = await serviceSupabase
+        .from("workspace_referral_codes")
+        .select("id")
+        .eq("referral_code", code)
+        .single()
+      if (!existing) {
+        isUnique = true
+      }
+      attempts++
+    }
+    if (code!) {
+      referralCodesData.push({
         workspace_id: workspace.id,
-        first_name: inv.first_name,
-        last_name: inv.last_name,
-        email: inv.email,
-        role: inv.role,
-        invited_by: user.id,
-        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+        role,
+        referral_code: code,
+      })
+    }
+  }
+
+  if (referralCodesData.length > 0) {
+    await serviceSupabase.from("workspace_referral_codes").insert(referralCodesData)
+  }
+
+  // Return workspace ID for team/manager to show referral codes dialog
+  if (data.workspace.type !== "personal_creator") {
+    return { workspaceId: workspace.id }
+  }
+
+  redirect("/dashboard")
+}
+
+export async function joinWorkspaceWithReferralCode(referralCode: string) {
+  const supabase = await createClient()
+  const serviceSupabase = createServiceClient()
+
+  // Get authenticated user
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser()
+
+  if (authError || !user) {
+    return { error: "Not authenticated: " + (authError?.message || "No user") }
+  }
+
+  // Check if user already has a workspace
+  const { data: existingMembership } = await supabase
+    .from("workspace_members")
+    .select("workspace_id")
+    .eq("user_id", user.id)
+    .single()
+
+  if (existingMembership) {
+    return { error: "You are already a member of a workspace" }
+  }
+
+  // Find the referral code
+  const { data: referralCodeData, error: codeError } = await serviceSupabase
+    .from("workspace_referral_codes")
+    .select("workspace_id, role")
+    .eq("referral_code", referralCode.toUpperCase().trim())
+    .single()
+
+  if (codeError || !referralCodeData) {
+    return { error: "Invalid referral code. Please check the code and try again." }
+  }
+
+  // Ensure user_profiles has email populated
+  const { data: existingProfile } = await supabase
+    .from("user_profiles")
+    .select("email")
+    .eq("id", user.id)
+    .single()
+
+  if (!existingProfile?.email && user.email) {
+    // Update user_profiles with email if missing
+    await supabase
+      .from("user_profiles")
+      .update({ email: user.email })
+      .eq("id", user.id)
+  }
+
+  // Add user as workspace member with the role from the referral code
+  const { data: workspaceMember, error: memberError } = await serviceSupabase
+    .from("workspace_members")
+    .insert({
+      workspace_id: referralCodeData.workspace_id,
+      user_id: user.id,
+      role: referralCodeData.role,
+    })
+    .select()
+    .single()
+
+  if (memberError || !workspaceMember) {
+    return { error: memberError?.message || "Failed to join workspace" }
+  }
+
+  // If role is "creator", create a creator record
+  if (referralCodeData.role === "creator") {
+    // Get user profile for name
+    const { data: userProfile } = await supabase
+      .from("user_profiles")
+      .select("first_name, last_name")
+      .eq("id", user.id)
+      .single()
+
+    const creatorName = userProfile?.first_name && userProfile?.last_name
+      ? `${userProfile.first_name} ${userProfile.last_name}`
+      : user.email?.split("@")[0] || "Creator"
+
+    // Create creator record
+    const { data: creatorData, error: creatorError } = await serviceSupabase
+      .from("creators")
+      .insert({
+        workspace_id: referralCodeData.workspace_id,
+        name: creatorName,
+        primary_niche: "General", // Default niche, can be updated later
+      })
+      .select()
+      .single()
+
+    if (creatorError) {
+      console.error("[v0] Error creating creator record:", creatorError)
+      return { error: "Failed to create creator record: " + creatorError.message }
+    } else if (creatorData) {
+      // Add creator access for the new member
+      await serviceSupabase.from("creator_access").insert({
+        workspace_member_id: workspaceMember.id,
+        creator_id: creatorData.id,
+      })
+      
+      // Redirect to creator setup page instead of dashboard
+      redirect(`/onboarding/creator-setup?creatorId=${creatorData.id}`)
+      return
+    }
+  }
+
+  redirect("/dashboard")
+}
+
+export async function updateCreatorProfile(data: {
+  creatorId: string
+  creator: {
+    name: string
+    brand_name?: string
+    primary_niche: string
+    sub_niches: string[]
+    platforms: string[]
+    posting_frequency: number
+    excluded_day_types: number[]
+    content_type_order: number[]
+  }
+}) {
+  const supabase = await createClient()
+  const serviceSupabase = createServiceClient()
+
+  // Get authenticated user
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser()
+
+  if (authError || !user) {
+    return { error: "Not authenticated: " + (authError?.message || "No user") }
+  }
+
+  // Verify user has access to this creator
+  const { data: creatorAccess } = await supabase
+    .from("creator_access")
+    .select("*, workspace_members!inner(user_id)")
+    .eq("creator_id", data.creatorId)
+    .eq("workspace_members.user_id", user.id)
+    .single()
+
+  if (!creatorAccess) {
+    return { error: "You don't have access to update this creator" }
+  }
+
+  // Update creator record
+  const { error: creatorError } = await serviceSupabase
+    .from("creators")
+    .update({
+      name: data.creator.name || data.creator.brand_name || "Creator",
+      brand_name: data.creator.brand_name || null,
+      primary_niche: data.creator.primary_niche,
+    })
+    .eq("id", data.creatorId)
+
+  if (creatorError) {
+    return { error: creatorError.message || "Failed to update creator" }
+  }
+
+  // Update or create posting framework
+  const { data: existingFramework } = await serviceSupabase
+    .from("creator_posting_frameworks")
+    .select("id")
+    .eq("creator_id", data.creatorId)
+    .single()
+
+  if (existingFramework) {
+    await serviceSupabase
+      .from("creator_posting_frameworks")
+      .update({
+        posting_frequency: data.creator.posting_frequency,
+        excluded_day_types: data.creator.excluded_day_types,
+        content_type_order: data.creator.content_type_order,
+      })
+      .eq("id", existingFramework.id)
+  } else {
+    await serviceSupabase.from("creator_posting_frameworks").insert({
+      creator_id: data.creatorId,
+      posting_frequency: data.creator.posting_frequency,
+      excluded_day_types: data.creator.excluded_day_types,
+      content_type_order: data.creator.content_type_order,
+    })
+  }
+
+  // Update sub-niches (delete existing and insert new)
+  await serviceSupabase.from("creator_sub_niches").delete().eq("creator_id", data.creatorId)
+
+  if (data.creator.sub_niches.length > 0) {
+    await serviceSupabase.from("creator_sub_niches").insert(
+      data.creator.sub_niches.map((niche) => ({
+        creator_id: data.creatorId,
+        sub_niche: niche,
       })),
     )
   }
 
-  redirect("/dashboard")
+  // Update platforms (delete existing and insert new)
+  await serviceSupabase.from("creator_platforms").delete().eq("creator_id", data.creatorId)
+
+  if (data.creator.platforms.length > 0) {
+    await serviceSupabase.from("creator_platforms").insert(
+      data.creator.platforms.map((platformId) => ({
+        creator_id: data.creatorId,
+        platform_id: platformId,
+      })),
+    )
+  }
+
+  revalidatePath("/profile/creators")
+  revalidatePath("/dashboard")
+  return { success: true }
 }
