@@ -4,6 +4,7 @@ import type React from "react"
 
 import { useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
+import { Suspense } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { AppNav } from "@/components/app-nav"
 import { Footer } from "@/components/footer"
@@ -29,7 +30,7 @@ interface EventWithDetails extends CalendarEvent {
   event_team_members: Array<{ user_id: string; user_profiles: { first_name: string; last_name: string } }>
 }
 
-export default function DashboardPage() {
+function DashboardContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const supabase = createClient()
@@ -676,5 +677,13 @@ export default function DashboardPage() {
         </DialogContent>
       </Dialog>
     </div>
+  )
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <DashboardContent />
+    </Suspense>
   )
 }
