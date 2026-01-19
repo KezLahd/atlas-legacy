@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, Suspense } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -24,7 +24,7 @@ interface CreatorData {
   entityType: "creator" | "brand"
 }
 
-export default function CreatorSetupPage() {
+function CreatorSetupContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const creatorId = searchParams.get("creatorId")
@@ -586,6 +586,14 @@ export default function CreatorSetupPage() {
         </Card>
       </div>
     </div>
+  )
+}
+
+export default function CreatorSetupPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <CreatorSetupContent />
+    </Suspense>
   )
 }
 
