@@ -178,12 +178,12 @@ export default function LandingPage() {
               </>
             ) : (
               <>
-                <Link href="/auth/login" className="text-sm text-muted-foreground hover:text-foreground">
-                  Login
-                </Link>
-                <Button asChild className="bg-primary hover:bg-primary/90 text-primary-foreground">
-                  <Link href="/auth/sign-up">Get Started</Link>
-                </Button>
+            <Link href="/auth/login" className="text-sm text-muted-foreground hover:text-foreground">
+              Login
+            </Link>
+            <Button asChild className="bg-primary hover:bg-primary/90 text-primary-foreground">
+              <Link href="/auth/sign-up">Get Started</Link>
+            </Button>
               </>
             )}
           </nav>
@@ -212,12 +212,12 @@ export default function LandingPage() {
               </>
             ) : (
               <>
-                <Button size="lg" asChild className="bg-primary hover:bg-primary/90 text-primary-foreground">
-                  <Link href="/auth/sign-up">Get Started Free</Link>
-                </Button>
-                <Button size="lg" variant="outline" asChild className="border-muted bg-transparent">
-                  <Link href="/auth/login">Learn More</Link>
-                </Button>
+            <Button size="lg" asChild className="bg-primary hover:bg-primary/90 text-primary-foreground">
+              <Link href="/auth/sign-up">Get Started Free</Link>
+            </Button>
+            <Button size="lg" variant="outline" asChild className="border-muted bg-transparent">
+              <Link href="/auth/login">Learn More</Link>
+            </Button>
               </>
             )}
           </div>
@@ -1526,9 +1526,9 @@ export default function LandingPage() {
                   Log Out
                 </Button>
               ) : (
-                <Button size="lg" asChild className="bg-primary hover:bg-primary/90 text-primary-foreground">
-                  <Link href="/auth/sign-up">Get Started Free</Link>
-                </Button>
+              <Button size="lg" asChild className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                <Link href="/auth/sign-up">Get Started Free</Link>
+              </Button>
               )}
             </div>
           </div>
