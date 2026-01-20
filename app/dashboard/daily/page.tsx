@@ -34,6 +34,7 @@ export default function DailyViewPage() {
   const searchParams = useSearchParams()
   const supabase = createClient()
   const [user, setUser] = useState<any>(null)
+  const [userRole, setUserRole] = useState<string>("")
   const [workspaceId, setWorkspaceId] = useState<string>("")
   const [creators, setCreators] = useState<Creator[]>([])
   const [events, setEvents] = useState<EventWithDetails[]>([])
@@ -56,10 +57,10 @@ export default function DailyViewPage() {
   }, [])
 
   useEffect(() => {
-    if (workspaceId) {
+    if (workspaceId && userRole) {
       loadEvents()
     }
-  }, [workspaceId, selectedDate])
+  }, [workspaceId, selectedDate, userRole, creators])
 
   const loadData = async () => {
     const {
@@ -73,7 +74,7 @@ export default function DailyViewPage() {
 
     const { data: membership } = await supabase
       .from("workspace_members")
-      .select("workspace_id")
+      .select("workspace_id, role")
       .eq("user_id", authUser.id)
       .single()
 
@@ -83,6 +84,7 @@ export default function DailyViewPage() {
     }
 
     setWorkspaceId(membership.workspace_id)
+    setUserRole(membership.role)
 
     // Load creators
     const { data: creatorsData } = await supabase
@@ -122,7 +124,28 @@ export default function DailyViewPage() {
       .order("start_time", { ascending: true })
 
     if (data) {
-      const userIds = data.flatMap((event) => event.event_team_members?.map((tm: any) => tm.user_id) || [])
+      // Apply role-based filtering
+      let filteredEvents = data
+      console.log("[v0] Loaded events for daily dashboard, role:", userRole, "count:", data.length)
+
+      // Creators: only see events assigned to them, created by them, or where they are on the team
+      if (userRole === "creator") {
+        filteredEvents = data.filter((event: any) => {
+          const isAssignedToCreator = event.assigned_to === user?.id
+          const isCreatedByCreator = event.created_by === user?.id
+          const isOnTeam = event.event_team_members?.some(
+            (tm: { user_id: string }) => tm.user_id === user?.id,
+          )
+          return isAssignedToCreator || isCreatedByCreator || isOnTeam
+        })
+      }
+      // Editors / viewers: currently see all (view-only). Owner/manager/strategist: see all.
+
+      console.log("[v0] Daily filtered events for", userRole, ":", filteredEvents.length)
+
+      const userIds = filteredEvents.flatMap(
+        (event) => event.event_team_members?.map((tm: any) => tm.user_id) || [],
+      )
       const uniqueUserIds = [...new Set(userIds)]
 
       const { data: profiles } = await supabase
@@ -136,12 +159,12 @@ export default function DailyViewPage() {
 
       console.log("[v0] Profile map:", Object.fromEntries(profileMap))
 
-      const eventsWithProfiles = data.map((event) => ({
+      const eventsWithProfiles = filteredEvents.map((event) => ({
         ...event,
         event_team_members:
           event.event_team_members?.map((tm: any) => ({
             ...tm,
-            user_profiles: profileMap.get(tm.user_id),
+            user_profiles: profileMap.get(tm.user_id) || null,
           })) || [],
       }))
 

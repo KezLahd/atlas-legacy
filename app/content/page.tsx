@@ -20,6 +20,7 @@ import { CreateBatchDialog } from "@/components/create-batch-dialog"
 import { EditBatchDialog } from "@/components/edit-batch-dialog"
 import { UserAvatar } from "@/components/user-avatar"
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card"
+import { Skeleton } from "@/components/ui/skeleton"
 import React from "react"
 
 interface ContentWithDetails extends Content {
@@ -50,6 +51,7 @@ export default function ContentPage() {
   const router = useRouter()
   const supabase = createClient()
   const [user, setUser] = useState<any>(null)
+  const [userRole, setUserRole] = useState<string>("")
   const [workspaceId, setWorkspaceId] = useState<string>("")
   const [content, setContent] = useState<ContentWithDetails[]>([])
   const [creators, setCreators] = useState<Array<{
@@ -103,7 +105,7 @@ export default function ContentPage() {
 
     const { data: membership } = await supabase
       .from("workspace_members")
-      .select("workspace_id")
+      .select("workspace_id, role")
       .eq("user_id", authUser.id)
       .single()
 
@@ -133,8 +135,8 @@ export default function ContentPage() {
 
     console.log("[DEBUG] Full workspace info:", workspaceInfo, "Error:", workspaceError, "Type:", workspaceInfo?.type, "Owner ID:", workspaceInfo?.owner_id)
 
-    // For personal brand workspaces, ensure the owner has a creator entry
-    if (workspaceInfo?.type === 'personal_brand' && workspaceInfo.owner_id) {
+    // For personal creator workspaces, ensure the owner has a creator entry
+    if (workspaceInfo?.type === 'personal_creator' && workspaceInfo.owner_id) {
       console.log("[DEBUG] Personal brand workspace detected, owner_id:", workspaceInfo.owner_id)
 
       const { data: existingCreator, error: creatorError } = await supabase
@@ -192,43 +194,61 @@ export default function ContentPage() {
       .eq("workspace_id", membership.workspace_id)
       .order("name")
 
-    // Then get workspace members with profiles for these creators
+    // Then get creator access and workspace members with profiles for these creators
     let creatorsWithProfiles = []
     if (creatorsData && creatorsData.length > 0) {
-      const { data: membersData } = await supabase
+      // Get creator access records to link creators to workspace members
+      const { data: accessData, error: accessError } = await supabase
+        .from("creator_access")
+        .select("creator_id, workspace_member_id")
+        .in("creator_id", creatorsData.map(c => c.id))
+
+      console.log("[DEBUG] Creator access query error:", accessError)
+      console.log("[DEBUG] Creator access data:", accessData)
+
+      // Get workspace members with profiles
+      const { data: membersData, error: membersError } = await supabase
         .from("workspace_members")
-        .select("*, user_profiles(first_name, last_name, email, avatar_type, avatar_bg_color, avatar_text_color, avatar_storage_path)")
+        .select("id, user_id, role, user_profiles(first_name, last_name, email, avatar_type, avatar_bg_color, avatar_text_color, avatar_storage_path)")
         .eq("workspace_id", membership.workspace_id)
-        .in("role", ["creator", "owner"])
 
+      console.log("[DEBUG] Workspace members query error:", membersError)
+      console.log("[DEBUG] Workspace members data:", membersData)
+
+      console.log("[DEBUG] Access data:", accessData)
       console.log("[DEBUG] Members data:", membersData)
 
-      console.log("[DEBUG] Creators data:", creatorsData)
-      console.log("[DEBUG] Members data:", membersData)
+      // For each creator, find the workspace member who has access to it
+      creatorsWithProfiles = creatorsData.map((creator: any) => {
+        // Find the creator access record for this creator
+        const accessRecord = accessData?.find((access: any) => access.creator_id === creator.id)
 
-      // For each creator, find the matching workspace member
-      creatorsWithProfiles = creatorsData.map(creator => {
-        // Try to find by user_id match first
-        let matchingMember = membersData?.find(member => member.user_id === creator.id)
+        // Find the workspace member from the access record
+        let matchingMember = null
+        if (accessRecord) {
+          matchingMember = membersData?.find((member: any) => member.id === accessRecord.workspace_member_id)
+        }
 
-        // If no direct match, try other strategies
+        // If no access record found, try fallback logic for legacy data
         if (!matchingMember) {
-          // First try to find a member with creator role
-          matchingMember = membersData?.find(member => member.role === "creator")
-
-          // If no creator role found, use the owner (for personal brand or other cases)
-          if (!matchingMember) {
-            matchingMember = membersData?.find(member => member.role === "owner")
+          // For personal creator workspaces, the owner might be the creator
+          if (workspaceInfo?.type === "personal_creator") {
+            matchingMember = membersData?.find((member: any) => member.role === "owner")
+          } else {
+            // For team/manager workspaces, try to find any member with creator access
+            matchingMember = membersData?.find((member: any) => member.role === "creator" || member.role === "owner")
           }
         }
 
-        console.log(`[DEBUG] Creator ${creator.id} (workspace type: ${workspaceInfo?.type}) matched to member:`, matchingMember)
+        console.log(`[DEBUG] Creator ${creator.id} (${creator.name}) matched to member:`, matchingMember, 'Access record:', accessRecord)
 
         return {
           ...creator,
           workspace_members: matchingMember ? [matchingMember] : []
         }
       })
+
+      console.log("[DEBUG] Final creators with profiles:", creatorsWithProfiles)
     }
 
     const creatorsRes = { data: creatorsWithProfiles }
@@ -269,7 +289,10 @@ export default function ContentPage() {
       setWorkspaceType(workspaceData.type)
     }
 
-    if (creatorsRes.data) setCreators(creatorsRes.data as any)
+    if (creatorsRes.data) {
+      setCreators(creatorsRes.data as any)
+
+    }
     if (batchesRes.data) setBatches(batchesRes.data)
 
     // Load platforms from workspace (similar to research page)
@@ -296,14 +319,25 @@ export default function ContentPage() {
       }
     }
 
+    setUserRole(membership.role)
+
     await loadContent(membership.workspace_id)
     await loadCalendarEvents(membership.workspace_id)
   }
 
+  // Reload calendar events when content or user role changes
+  useEffect(() => {
+    if (workspaceId) {
+      loadCalendarEvents(workspaceId)
+    }
+  }, [content, userRole])
+
   const loadContent = async (workspaceId: string) => {
     setIsLoading(true)
-    console.log("[v0] Loading content for workspace:", workspaceId)
-    const { data, error } = await supabase
+    console.log("[v0] Loading content for workspace:", workspaceId, "user role:", userRole)
+
+    // Build the query based on user role
+    let query = supabase
       .from("content")
       .select(
         `
@@ -329,9 +363,31 @@ export default function ContentPage() {
       `,
       )
       .eq("workspace_id", workspaceId)
-      .order("created_at", { ascending: false })
+
+    // Apply role-based filtering
+    if (userRole === "creator") {
+      // Creators can only see their own content
+      const userCreator = creators.find(c => c.workspace_members?.[0]?.user_id === user?.id)
+      if (userCreator) {
+        query = query.eq("creator_id", userCreator.id)
+      }
+    } else if (userRole === "editor" || userRole === "viewer") {
+      // Editors and viewers can only see content they created or content assigned to them
+      // For now, let's allow them to see all content but restrict editing (handled in UI)
+      // This can be refined later based on specific requirements
+    }
+    // Owner, manager, strategist have full access (no additional filtering)
+
+    const { data, error } = await query.order("created_at", { ascending: false })
 
     console.log("[v0] Content query result:", { data, error, count: data?.length || 0 })
+    if (data && data.length > 0) {
+      console.log("[DEBUG] Sample content items:", data.slice(0, 3).map(item => ({
+        id: item.id,
+        creator_id: item.creator_id,
+        hook: item.hook?.substring(0, 50)
+      })))
+    }
     if (error) {
       console.error("[v0] Error loading content:", error)
       setIsLoading(false)
@@ -364,7 +420,7 @@ export default function ContentPage() {
   }
 
   const loadCalendarEvents = async (workspaceId: string) => {
-    const { data, error } = await supabase
+    const { data: eventsData, error } = await supabase
       .from("calendar_events")
       .select("id, title, start_time, end_time, category, content_id")
       .eq("workspace_id", workspaceId)
@@ -375,9 +431,51 @@ export default function ContentPage() {
       return
     }
 
-    if (data) {
-      setCalendarEvents(data)
+    if (eventsData) {
+      let filteredEvents = eventsData
+
+      // For creators, show only events attached to content they can see
+      if (userRole === "creator") {
+        const visibleContentIds = content.map((c) => c.id)
+        filteredEvents = eventsData.filter(
+          (event) => !event.content_id || visibleContentIds.includes(event.content_id),
+        )
+      }
+
+      // Editors / viewers can see events for all visible content (same as above, but they already
+      // see all content rows via RLS + UI filters). Owners/managers/strategists see all events.
+
+      setCalendarEvents(filteredEvents)
     }
+  }
+
+  // Helper to get the current user's creator id (if they are a creator)
+  const getCurrentCreatorId = () => {
+    if (!user || !creators.length) return null
+    const creatorRecord = (creators as any).find(
+      (c: any) => c.workspace_members?.[0]?.user_id === user.id,
+    )
+    return creatorRecord?.id || null
+  }
+
+  // Role-based edit permission:
+  // - owner / manager / strategist: can edit any content
+  // - creator: can edit only their own content
+  // - editor / viewer: cannot edit
+  const canEditContent = (item?: ContentWithDetails) => {
+    if (["owner", "manager", "strategist"].includes(userRole)) {
+      return true
+    }
+
+    if (userRole === "creator") {
+      const currentCreatorId = getCurrentCreatorId()
+      if (!currentCreatorId) return false
+      // For header-level checks (no item passed), allow showing create buttons
+      if (!item) return true
+      return item.creator_id === currentCreatorId
+    }
+
+    return false
   }
 
   const filteredContent = content.filter((item) => {
@@ -408,6 +506,16 @@ export default function ContentPage() {
     // Creator filter
     if (selectedCreator !== "all" && item.creator_id !== selectedCreator) {
       return false
+    }
+
+    // Role-based visibility:
+    // - owner / manager / strategist: can see all content
+    // - creator: only see their own creator's content
+    // - editor / viewer: can see all content (view-only)
+    if (userRole === "creator") {
+      const currentCreatorId = getCurrentCreatorId()
+      if (!currentCreatorId) return false
+      if (item.creator_id !== currentCreatorId) return false
     }
 
     // Stage filter
@@ -548,13 +656,18 @@ export default function ContentPage() {
             <p className="text-muted-foreground">Plan, script, and manage your content pipeline</p>
           </div>
           <div className="flex gap-2">
-            <CreateBatchDialog workspaceId={workspaceId} creators={creators as any} onBatchCreated={() => loadData()} />
-            <CreateContentDialog
-              workspaceId={workspaceId}
-              creators={creators as any}
-              onContentCreated={() => loadContent(workspaceId)}
-              workspaceType={workspaceType}
-            />
+            {canEditContent() && (
+              <>
+                <CreateBatchDialog workspaceId={workspaceId} creators={creators as any} onBatchCreated={() => loadData()} />
+                <CreateContentDialog
+                  workspaceId={workspaceId}
+                  creators={creators as any}
+                  onContentCreated={() => loadContent(workspaceId)}
+                  workspaceType={workspaceType}
+                  userRole={userRole}
+                />
+              </>
+            )}
           </div>
         </div>
 
@@ -634,8 +747,88 @@ export default function ContentPage() {
 
         {/* Table Section */}
             {isLoading ? (
-              <div className="py-12 text-center">
-                <p className="text-muted-foreground">Loading content...</p>
+              <div className="bg-white border rounded-lg">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-accent hover:bg-accent">
+                      <TableHead className="font-semibold w-8 text-white rounded-tl-lg">
+                        <Skeleton className="h-4 w-4 bg-muted" />
+                      </TableHead>
+                      <TableHead className="font-semibold text-white">
+                        <Skeleton className="h-4 w-16 bg-muted" />
+                      </TableHead>
+                      <TableHead className="font-semibold text-white hidden md:table-cell">
+                        <Skeleton className="h-4 w-12 bg-muted" />
+                      </TableHead>
+                      <TableHead className="font-semibold text-white">
+                        <Skeleton className="h-4 w-14 bg-muted" />
+                      </TableHead>
+                      <TableHead className="font-semibold text-white hidden md:table-cell">
+                        <Skeleton className="h-4 w-16 bg-muted" />
+                      </TableHead>
+                      <TableHead className="font-semibold text-white">
+                        <Skeleton className="h-4 w-12 bg-muted" />
+                      </TableHead>
+                      <TableHead className="font-semibold text-white text-center">
+                        <Skeleton className="h-4 w-16 bg-muted mx-auto" />
+                      </TableHead>
+                      <TableHead className="font-semibold text-white rounded-tr-lg">
+                        <Skeleton className="h-4 w-12 bg-muted" />
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {/* Batch header skeleton */}
+                    <TableRow className="bg-accent/5 hover:bg-accent/5">
+                      <TableCell className="w-8">
+                        <Skeleton className="h-4 w-4 bg-muted" />
+                      </TableCell>
+                      <TableCell colSpan={6} className="font-semibold text-sm py-2">
+                        <Skeleton className="h-4 w-48 bg-muted" />
+                      </TableCell>
+                    </TableRow>
+                    {/* Content row skeletons */}
+                    {Array.from({ length: 3 }).map((_, index) => (
+                      <TableRow key={index} className="cursor-pointer hover:bg-accent/10 transition-colors">
+                        <TableCell>
+                          <Skeleton className="h-6 w-6 bg-muted" />
+                        </TableCell>
+                        <TableCell className="font-medium">
+                          <div className="space-y-1">
+                            <Skeleton className="h-4 w-64 bg-muted" />
+                            <Skeleton className="h-3 w-32 bg-muted" />
+                          </div>
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell">
+                          <Skeleton className="h-5 w-16 bg-muted rounded-full" />
+                        </TableCell>
+                        <TableCell>
+                          <div className="md:hidden flex justify-center">
+                            <Skeleton className="h-6 w-6 bg-muted rounded-full" />
+                          </div>
+                          <div className="hidden md:block">
+                            <Skeleton className="h-4 w-20 bg-muted" />
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground hidden md:table-cell">
+                          <Skeleton className="h-4 w-24 bg-muted" />
+                        </TableCell>
+                        <TableCell>
+                          <Skeleton className="h-4 w-16 bg-muted" />
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <div className="flex gap-2 items-center justify-center">
+                            <Skeleton className="h-8 w-8 bg-muted rounded" />
+                            <Skeleton className="h-8 w-8 bg-muted rounded" />
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Skeleton className="h-4 w-16 bg-muted" />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
               </div>
             ) : filteredContent.length > 0 ? (
               <div className="bg-white border rounded-lg">
@@ -687,7 +880,13 @@ export default function ContentPage() {
                               {formatBatchDateRange(batch)}
                             </TableCell>
                             <TableCell className="py-2 text-right">
-                              <EditBatchDialog batch={batch} creators={creators as any} onBatchUpdated={() => loadData()} />
+                              {["owner", "manager", "strategist"].includes(userRole) && (
+                                <EditBatchDialog
+                                  batch={batch}
+                                  creators={creators as any}
+                                  onBatchUpdated={() => loadData()}
+                                />
+                              )}
                             </TableCell>
                           </TableRow>
                           {/* Content rows for this batch */}
@@ -738,7 +937,7 @@ export default function ContentPage() {
                                             ? `${creator.workspace_members[0].user_profiles.first_name} ${creator.workspace_members[0].user_profiles.last_name}`
                                             : creator?.name || 'Unknown Creator'
 
-                                          console.log('Creator found:', creator, 'Profile:', creator?.workspace_members?.[0]?.user_profiles) // Debug log
+                                          console.log('[DEBUG] Content', item.id, 'creator_id', item.creator_id, 'found creator:', creator, 'Profile:', creator?.workspace_members?.[0]?.user_profiles) // Debug log
 
                                           return (
                                             <HoverCard>
@@ -767,6 +966,7 @@ export default function ContentPage() {
                                       <div className="hidden md:block">
                                         {(() => {
                                           const creator = creators.find(c => c.id === item.creator_id)
+                                          console.log(`[DEBUG] Content ${item.id} creator_id ${item.creator_id} found creator:`, creator)
                                           return creator?.workspace_members?.[0]?.user_profiles
                                             ? `${creator.workspace_members[0].user_profiles.first_name} ${creator.workspace_members[0].user_profiles.last_name}`
                                             : creator?.name || 'Unknown Creator'
@@ -938,7 +1138,8 @@ export default function ContentPage() {
                                               <CardContent className="px-4 py-4 space-y-2">
                                                 <div className="flex items-center justify-between">
                                                   <h5 className="font-semibold">Content Details</h5>
-                                                  <EditContentDialog
+                                                  {canEditContent(item) && (
+                                                    <EditContentDialog
                                                     contentId={item.id}
                                                     workspaceId={workspaceId}
                                                     creators={creators as any}
@@ -951,6 +1152,7 @@ export default function ContentPage() {
                                                       </Button>
                                                     }
                                                   />
+                                                  )}
                                                 </div>
                                                 <div className="space-y-2 text-sm">
                                                   <div>
@@ -1138,9 +1340,16 @@ export default function ContentPage() {
                     {unbatched.length > 0 && (
                       <>
                         <TableRow className="bg-accent/5 hover:bg-accent/5">
-                          <TableCell colSpan={8} className="font-semibold text-sm py-2">
+                          <TableCell className="w-8"></TableCell>
+                          {/* Mobile: span 4 columns (Title, Creator, Pillar, Platforms) */}
+                          <TableCell colSpan={4} className="font-semibold text-sm py-2 md:hidden">
                             Unbatched Content
                           </TableCell>
+                          {/* Desktop: span 6 columns (Title, Stage, Creator, Created By, Pillar, Platforms) */}
+                          <TableCell colSpan={6} className="font-semibold text-sm py-2 hidden md:table-cell">
+                            Unbatched Content
+                          </TableCell>
+                          <TableCell className="py-2"></TableCell>
                         </TableRow>
                         {unbatched.map((item) => {
                           const isExpanded = expandedRows.has(item.id)
@@ -1149,7 +1358,7 @@ export default function ContentPage() {
                           return (
                             <React.Fragment key={item.id}>
                               <TableRow
-                                className="cursor-pointer hover:bg-accent/10 transition-colors"
+                                className={`cursor-pointer hover:bg-accent/10 transition-colors ${getStageBgColor(item.production_stage)}`}
                                 onClick={() => toggleExpanded(item.id)}
                               >
                                 <TableCell>
@@ -1173,20 +1382,58 @@ export default function ContentPage() {
                                     )}
                                   </div>
                                 </TableCell>
-                                <TableCell>
+                                <TableCell className="hidden md:table-cell">
                                   <Badge className={getStageColor(item.production_stage)} variant="outline">
                                     {item.production_stage}
                                   </Badge>
                                 </TableCell>
                                     <TableCell>
-                                      {(() => {
-                                        const creator = creators.find(c => c.id === item.creator_id)
-                                        return creator?.workspace_members?.[0]?.user_profiles
-                                          ? `${creator.workspace_members[0].user_profiles.first_name} ${creator.workspace_members[0].user_profiles.last_name}`
-                                          : creator?.name || 'Unknown Creator'
-                                      })()}
+                                      {/* Mobile: Avatar with hover tooltip */}
+                                      <div className="md:hidden flex justify-center">
+                                        {(() => {
+                                          // Find the creator in the creators array using creator_id
+                                          const creator = creators.find(c => c.id === item.creator_id)
+                                          const creatorName = creator?.workspace_members?.[0]?.user_profiles
+                                            ? `${creator.workspace_members[0].user_profiles.first_name} ${creator.workspace_members[0].user_profiles.last_name}`
+                                            : creator?.name || 'Unknown Creator'
+
+                                          console.log('[DEBUG] Content', item.id, 'creator_id', item.creator_id, 'found creator:', creator, 'Profile:', creator?.workspace_members?.[0]?.user_profiles) // Debug log
+
+                                          return (
+                                            <HoverCard>
+                                              <HoverCardTrigger asChild>
+                                                <div className="cursor-pointer">
+                                                  <UserAvatar
+                                                    profile={creator?.workspace_members?.[0]?.user_profiles || {
+                                                      first_name: creatorName.split(' ')[0] || '',
+                                                      last_name: creatorName.split(' ').slice(1).join(' ') || '',
+                                                      avatar_type: 'initials',
+                                                      avatar_bg_color: '#89cff0', // Default light blue from user_profiles
+                                                      avatar_text_color: '#ffffff', // Default white from user_profiles
+                                                    }}
+                                                    size="xs"
+                                                  />
+                                                </div>
+                                              </HoverCardTrigger>
+                                              <HoverCardContent>
+                                                <p className="text-sm font-medium">{creatorName}</p>
+                                              </HoverCardContent>
+                                            </HoverCard>
+                                          )
+                                        })()}
+                                      </div>
+                                      {/* Desktop: Name */}
+                                      <div className="hidden md:block">
+                                        {(() => {
+                                          const creator = creators.find(c => c.id === item.creator_id)
+                                          console.log(`[DEBUG] Content ${item.id} creator_id ${item.creator_id} found creator:`, creator)
+                                          return creator?.workspace_members?.[0]?.user_profiles
+                                            ? `${creator.workspace_members[0].user_profiles.first_name} ${creator.workspace_members[0].user_profiles.last_name}`
+                                            : creator?.name || 'Unknown Creator'
+                                        })()}
+                                      </div>
                                     </TableCell>
-                                <TableCell className="text-sm text-muted-foreground">
+                                <TableCell className="text-sm text-muted-foreground hidden md:table-cell">
                                   {item.created_by_profile
                                     ? `${item.created_by_profile.first_name} ${item.created_by_profile.last_name}`
                                     : "Unknown"}
@@ -1349,7 +1596,8 @@ export default function ContentPage() {
                                           <CardContent className="px-4 py-4 space-y-2 break-words">
                                             <div className="flex items-center justify-between">
                                               <h5 className="font-semibold">Content Details</h5>
-                                              <EditContentDialog
+                                              {canEditContent(item) && (
+                                                <EditContentDialog
                                                 contentId={item.id}
                                                 workspaceId={workspaceId}
                                                 creators={creators as any}
@@ -1362,6 +1610,7 @@ export default function ContentPage() {
                                                   </Button>
                                                 }
                                               />
+                                              )}
                                             </div>
                                             <div className="space-y-2 text-sm">
                                               <div className="break-words">
@@ -1544,12 +1793,15 @@ export default function ContentPage() {
             ) : (
               <div className="py-12 text-center">
                 <p className="text-muted-foreground mb-4">"No content yet. Create your first piece!"</p>
-                <CreateContentDialog
-                  workspaceId={workspaceId}
-                  creators={creators as any}
-                  onContentCreated={() => loadContent(workspaceId)}
-                  workspaceType={workspaceType}
-                />
+                {canEditContent() && (
+                  <CreateContentDialog
+                    workspaceId={workspaceId}
+                    creators={creators as any}
+                    onContentCreated={() => loadContent(workspaceId)}
+                    workspaceType={workspaceType}
+                    userRole={userRole}
+                  />
+                )}
               </div>
             )}
       </main>

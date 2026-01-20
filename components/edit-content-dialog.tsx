@@ -9,7 +9,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Checkbox } from "@/components/ui/checkbox"
 import { Pencil, ArrowRight, ArrowLeft } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type {
@@ -73,7 +72,7 @@ export function EditContentDialog({
     return (
       hook.trim() !== "" &&
       selectedCreator !== "" &&
-      selectedPlatforms.length > 0 &&
+      (selectedCreator === "" || selectedPlatforms.length > 0) &&
       format !== "" &&
       selectedPillar !== ""
     )
@@ -143,20 +142,41 @@ export function EditContentDialog({
     }
   }, [selectedPillar])
 
+  // Load platforms when creator is selected
+  useEffect(() => {
+    if (selectedCreator) {
+      loadPlatformsForCreator(selectedCreator)
+    } else {
+      setPlatforms([])
+    }
+  }, [selectedCreator])
+
+  const loadPlatformsForCreator = async (creatorId: string) => {
+    if (!creatorId) {
+      setPlatforms([])
+      return
+    }
+
+    // Get platforms for the specific creator
+    const { data: platformsRes } = await supabase
+      .from("creator_platforms")
+      .select("platforms(*)")
+      .eq("creator_id", creatorId)
+
+    if (platformsRes) {
+      const creatorPlatforms = platformsRes.map((cp: any) => cp.platforms).filter(Boolean) as Platform[]
+      setPlatforms(creatorPlatforms)
+    } else {
+      setPlatforms([])
+    }
+  }
+
   const loadData = async () => {
     const { data: content } = await supabase.from("content").select("creator_id").eq("id", contentId).single()
 
-    let creatorPlatforms: Platform[] = []
-
+    // Load platforms for the current creator
     if (content?.creator_id) {
-      const { data: platformsRes } = await supabase
-        .from("creator_platforms")
-        .select("platforms(*)")
-        .eq("creator_id", content.creator_id)
-
-      if (platformsRes) {
-        creatorPlatforms = platformsRes.map((cp: any) => cp.platforms).filter(Boolean)
-      }
+      await loadPlatformsForCreator(content.creator_id)
     }
 
     const [pillarsRes, fourHsRes, batchesRes, storytellingFormatsRes, contentTypesRes] = await Promise.all([
@@ -167,7 +187,6 @@ export function EditContentDialog({
       supabase.from("content_types").select("*").order("id"),
     ])
 
-    setPlatforms(creatorPlatforms) // Use filtered platforms
     if (pillarsRes.data) setPillars(pillarsRes.data)
     if (fourHsRes.data) setFourHs(fourHsRes.data)
     if (batchesRes.data) setBatches(batchesRes.data)
@@ -397,42 +416,125 @@ export function EditContentDialog({
 
             {workspaceType !== "personal_creator" && (
               <div className="space-y-2">
-                <Label htmlFor="creator">Creator *</Label>
-                <Select value={selectedCreator} onValueChange={setSelectedCreator}>
-                  <SelectTrigger id="creator">
-                    <SelectValue placeholder="Select creator" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {creators.map((creator) => (
-                      <SelectItem key={creator.id} value={creator.id}>
-                        {creator.name || creator.brand_name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label>Creator *</Label>
+                <div className="grid grid-cols-3 gap-2">
+                  {creators.map((creator) => (
+                    <Button
+                      key={creator.id}
+                      type="button"
+                      variant={selectedCreator === creator.id ? "default" : "outline"}
+                      className={`w-full ${
+                        selectedCreator === creator.id
+                          ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                          : "bg-white hover:bg-accent"
+                      }`}
+                      onClick={() => setSelectedCreator(creator.id)}
+                    >
+                      {creator.name || creator.brand_name}
+                    </Button>
+                  ))}
+                </div>
               </div>
             )}
 
-            <div className="space-y-2">
-              <Label>Platforms *</Label>
-              <div className="grid grid-cols-2 gap-2">
-                {platforms.map((platform) => (
-                  <div key={platform.id} className="flex items-center space-x-2">
-                    <Checkbox
-                      id={platform.id}
-                      checked={selectedPlatforms.includes(platform.id)}
-                      onCheckedChange={() => togglePlatform(platform.id)}
-                    />
-                    <label htmlFor={platform.id} className="text-sm cursor-pointer">
-                      {platform.name}
-                    </label>
-                  </div>
-                ))}
+            {selectedCreator && (
+              <div className="space-y-2">
+                <Label>Platforms *</Label>
+                <div className="grid grid-cols-3 gap-2">
+                  {platforms.map((platform) => {
+                    const isSelected = selectedPlatforms.includes(platform.id)
+                    const platformName = platform.name.toLowerCase()
+
+                    // Platform configuration with colors and icons
+                    const platformConfig: Record<
+                      string,
+                      { icon: string; bg: string; border: string; text: string }
+                    > = {
+                      youtube: {
+                        icon: "/icons/youtube.svg",
+                        bg: "bg-red-50",
+                        border: "border-red-600",
+                        text: "text-red-700",
+                      },
+                      tiktok: {
+                        icon: "/icons/tiktok.svg",
+                        bg: "bg-gradient-to-br from-cyan-50 via-pink-50 to-black/5",
+                        border: "border-black",
+                        text: "text-black",
+                      },
+                      instagram: {
+                        icon: "/icons/instagram.svg",
+                        bg: "bg-gradient-to-br from-purple-50 via-pink-50 to-orange-50",
+                        border: "border-pink-500",
+                        text: "text-pink-700",
+                      },
+                      twitter: {
+                        icon: "/icons/x.svg",
+                        bg: "bg-black/5",
+                        border: "border-black",
+                        text: "text-black",
+                      },
+                      x: {
+                        icon: "/icons/x.svg",
+                        bg: "bg-black/5",
+                        border: "border-black",
+                        text: "text-black",
+                      },
+                      linkedin: {
+                        icon: "/icons/linkedin.svg",
+                        bg: "bg-blue-50",
+                        border: "border-blue-700",
+                        text: "text-blue-800",
+                      },
+                      facebook: {
+                        icon: "/icons/facebook.svg",
+                        bg: "bg-blue-50",
+                        border: "border-blue-600",
+                        text: "text-blue-700",
+                      },
+                    }
+
+                    const config = platformConfig[platformName] || {
+                      icon: "",
+                      bg: "bg-gray-50",
+                      border: "border-gray-400",
+                      text: "text-gray-700",
+                    }
+
+                    return (
+                      <div
+                        key={platform.id}
+                        className={`
+                          flex flex-col items-center justify-center p-3 rounded-lg cursor-pointer transition-all
+                          ${
+                            isSelected
+                              ? `${config.bg} border-2 ${config.border} shadow-sm`
+                              : "bg-background border border-border hover:bg-muted/50"
+                          }
+                        `}
+                        onClick={() => togglePlatform(platform.id)}
+                      >
+                        {config.icon ? (
+                          <img
+                            src={config.icon}
+                            alt={platform.name}
+                            className="w-6 h-6 mb-1"
+                          />
+                        ) : (
+                          <span className="text-lg mb-1">🔗</span>
+                        )}
+                        <span className={`text-xs font-medium ${isSelected ? config.text : "text-foreground"}`}>
+                          {platform.name}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Edit workspace in profile page to change platform preferences
+                </p>
               </div>
-              <p className="text-xs text-muted-foreground mt-2">
-                Edit workspace in profile page to change platform preferences
-              </p>
-            </div>
+            )}
 
             <div className="space-y-2">
               <Label>Format *</Label>

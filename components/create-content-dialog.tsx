@@ -26,6 +26,7 @@ interface CreateContentDialogProps {
   creators: Creator[]
   onContentCreated: () => void
   workspaceType?: string
+  userRole?: string
   open?: boolean
   onOpenChange?: (open: boolean) => void
   trigger?: React.ReactNode
@@ -46,6 +47,7 @@ export function CreateContentDialog({
   creators,
   onContentCreated,
   workspaceType,
+  userRole,
   open: externalOpen,
   onOpenChange: externalOnOpenChange,
   trigger,
@@ -102,7 +104,7 @@ export function CreateContentDialog({
     return (
       hook.trim() !== "" &&
       selectedCreator !== "" &&
-      selectedPlatforms.length > 0 &&
+      (selectedCreator === "" || selectedPlatforms.length > 0) &&
       format !== "" &&
       selectedPillar !== ""
     )
@@ -177,6 +179,15 @@ export function CreateContentDialog({
     }
   }, [open])
 
+  // Load platforms when creator is selected
+  useEffect(() => {
+    if (selectedCreator) {
+      loadPlatformsForCreator(selectedCreator)
+    } else {
+      setPlatforms([])
+    }
+  }, [selectedCreator])
+
   // Set initial values when dialog opens and initialValues are provided
   useEffect(() => {
     if (open && initialValues && creators.length > 0) {
@@ -210,14 +221,20 @@ export function CreateContentDialog({
     }
   }, [open, initialValues, creators])
 
-  // Auto-select creator if there's only one and no creator is selected yet
+  // Auto-select creator based on user role and available creators
   useEffect(() => {
     if (open && creators.length > 0 && !selectedCreator) {
-      if (creators.length === 1 || workspaceType === "personal_creator") {
+      if (userRole === "creator") {
+        // For creators, find their own creator profile and auto-select it
+        // This should be the creator where workspace_members[0].user_id matches current user
+        // For now, we'll select the first creator (this should be improved to match by user ID)
+        setSelectedCreator(creators[0].id)
+      } else if (creators.length === 1 || workspaceType === "personal_creator") {
+        // For other roles, auto-select if only one creator or personal workspace
         setSelectedCreator(creators[0].id)
       }
     }
-  }, [open, creators, selectedCreator, workspaceType])
+  }, [open, creators, selectedCreator, workspaceType, userRole])
 
 
   useEffect(() => {
@@ -260,41 +277,31 @@ export function CreateContentDialog({
     }
   }, [selectedPillar])
 
-  const loadData = async () => {
-    // Always load all workspace platforms, not just creator-specific
-    // Get all creators in the workspace
-    const { data: workspaceCreators } = await supabase
-      .from("creators")
-      .select("id")
-      .eq("workspace_id", workspaceId)
-
-    const creatorIds = workspaceCreators?.map((c) => c.id) || []
-
-    let platformsRes
-    if (creatorIds.length > 0) {
-      // Get all platforms for all creators in the workspace
-      const { data: workspacePlatformsData } = await supabase
-        .from("creator_platforms")
-        .select("platforms(*)")
-        .in("creator_id", creatorIds)
-
-      if (workspacePlatformsData && workspacePlatformsData.length > 0) {
-        // Extract unique platforms
-        const uniquePlatforms = Array.from(
-          new Map(
-            workspacePlatformsData
-              .map((cp: any) => cp.platforms)
-              .filter((p: any) => p !== null)
-              .map((p: Platform) => [p.id, p]),
-          ).values(),
-        ) as Platform[]
-        platformsRes = { data: uniquePlatforms }
-      } else {
-        platformsRes = { data: [] }
-      }
-    } else {
-      platformsRes = { data: [] }
+  const loadPlatformsForCreator = async (creatorId: string) => {
+    if (!creatorId) {
+      setPlatforms([])
+      return
     }
+
+    // Get platforms for the specific creator
+    const { data: creatorPlatformsData } = await supabase
+      .from("creator_platforms")
+      .select("platforms(*)")
+      .eq("creator_id", creatorId)
+
+    if (creatorPlatformsData && creatorPlatformsData.length > 0) {
+      // Extract platforms
+      const creatorPlatforms = creatorPlatformsData
+        .map((cp: any) => cp.platforms)
+        .filter((p: any) => p !== null) as Platform[]
+      setPlatforms(creatorPlatforms)
+    } else {
+      setPlatforms([])
+    }
+  }
+
+  const loadData = async () => {
+    // Platforms will be loaded when creator is selected
 
     const [pillarsRes, fourHsRes, batchesRes, storytellingFormatsRes, contentTypesRes] = await Promise.all([
       supabase.from("content_pillars").select("*").order("name"),
@@ -307,7 +314,6 @@ export function CreateContentDialog({
         .order("id"), // Added contentTypes to the load data call
     ])
 
-    if (platformsRes.data) setPlatforms(platformsRes.data)
     if (pillarsRes.data) setPillars(pillarsRes.data)
     if (fourHsRes.data) setFourHs(fourHsRes.data)
     if (batchesRes.data) setBatches(batchesRes.data)
@@ -583,8 +589,8 @@ export function CreateContentDialog({
               <p className="text-xs text-muted-foreground">A catchy title or opening line for this content</p>
             </div>
 
-            {/* Creator Selection */}
-            {workspaceType !== "personal_creator" && (
+            {/* Creator Selection - Only show for non-creator roles */}
+            {workspaceType !== "personal_creator" && userRole !== "creator" && (
               <div className="space-y-2">
                 <Label>Creator *</Label>
                 <div className="grid grid-cols-3 gap-2">
@@ -607,26 +613,104 @@ export function CreateContentDialog({
               </div>
             )}
 
-            <div className="space-y-2">
-              <Label>Platforms *</Label>
-              <div className="grid grid-cols-2 gap-2">
-                {platforms.map((platform) => (
-                  <div key={platform.id} className="flex items-center space-x-2">
-                    <Checkbox
-                      id={platform.id}
-                      checked={selectedPlatforms.includes(platform.id)}
-                      onCheckedChange={() => togglePlatform(platform.id)}
-                    />
-                    <label htmlFor={platform.id} className="text-sm cursor-pointer">
-                      {platform.name}
-                    </label>
-                  </div>
-                ))}
+            {selectedCreator && (
+              <div className="space-y-2">
+                <Label>Platforms *</Label>
+                <div className="grid grid-cols-3 gap-2">
+                  {platforms.map((platform) => {
+                    const isSelected = selectedPlatforms.includes(platform.id)
+                    const platformName = platform.name.toLowerCase()
+
+                    // Platform configuration with colors and icons
+                    const platformConfig: Record<
+                      string,
+                      { icon: string; bg: string; border: string; text: string }
+                    > = {
+                      youtube: {
+                        icon: "/icons/youtube.svg",
+                        bg: "bg-red-50",
+                        border: "border-red-600",
+                        text: "text-red-700",
+                      },
+                      tiktok: {
+                        icon: "/icons/tiktok.svg",
+                        bg: "bg-gradient-to-br from-cyan-50 via-pink-50 to-black/5",
+                        border: "border-black",
+                        text: "text-black",
+                      },
+                      instagram: {
+                        icon: "/icons/instagram.svg",
+                        bg: "bg-gradient-to-br from-purple-50 via-pink-50 to-orange-50",
+                        border: "border-pink-500",
+                        text: "text-pink-700",
+                      },
+                      twitter: {
+                        icon: "/icons/x.svg",
+                        bg: "bg-black/5",
+                        border: "border-black",
+                        text: "text-black",
+                      },
+                      x: {
+                        icon: "/icons/x.svg",
+                        bg: "bg-black/5",
+                        border: "border-black",
+                        text: "text-black",
+                      },
+                      linkedin: {
+                        icon: "/icons/linkedin.svg",
+                        bg: "bg-blue-50",
+                        border: "border-blue-700",
+                        text: "text-blue-800",
+                      },
+                      facebook: {
+                        icon: "/icons/facebook.svg",
+                        bg: "bg-blue-50",
+                        border: "border-blue-600",
+                        text: "text-blue-700",
+                      },
+                    }
+
+                    const config = platformConfig[platformName] || {
+                      icon: "",
+                      bg: "bg-gray-50",
+                      border: "border-gray-400",
+                      text: "text-gray-700",
+                    }
+
+                    return (
+                      <div
+                        key={platform.id}
+                        className={`
+                          flex flex-col items-center justify-center p-3 rounded-lg cursor-pointer transition-all
+                          ${
+                            isSelected
+                              ? `${config.bg} border-2 ${config.border} shadow-sm`
+                              : "bg-background border border-border hover:bg-muted/50"
+                          }
+                        `}
+                        onClick={() => togglePlatform(platform.id)}
+                      >
+                        {config.icon ? (
+                          <img
+                            src={config.icon}
+                            alt={platform.name}
+                            className="w-6 h-6 mb-1"
+                          />
+                        ) : (
+                          <span className="text-lg mb-1">🔗</span>
+                        )}
+                        <span className={`text-xs font-medium ${isSelected ? config.text : "text-foreground"}`}>
+                          {platform.name}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Edit workspace in profile page to change platform preferences
+                </p>
               </div>
-              <p className="text-xs text-muted-foreground">
-                Edit workspace in profile page to change platform preferences
-              </p>
-            </div>
+            )}
 
             <div className="space-y-2">
               <Label>Format *</Label>

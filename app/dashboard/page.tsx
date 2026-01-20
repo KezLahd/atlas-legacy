@@ -35,6 +35,7 @@ function DashboardContent() {
   const searchParams = useSearchParams()
   const supabase = createClient()
   const [user, setUser] = useState<any>(null)
+  const [userRole, setUserRole] = useState<string>("")
   const [workspaceId, setWorkspaceId] = useState<string>("")
   const [workspaceName, setWorkspaceName] = useState<string>("")
   const [events, setEvents] = useState<EventWithDetails[]>([])
@@ -116,7 +117,7 @@ function DashboardContent() {
 
     const { data: membership } = await supabase
       .from("workspace_members")
-      .select("workspace_id, workspaces(name)")
+      .select("workspace_id, role, workspaces(name)")
       .eq("user_id", authUser.id)
       .single()
 
@@ -126,6 +127,7 @@ function DashboardContent() {
     }
 
     setWorkspaceId(membership.workspace_id)
+    setUserRole(membership.role)
     setWorkspaceName(membership.workspaces?.name || "")
 
     // Load creators and batches
@@ -177,8 +179,29 @@ function DashboardContent() {
       console.log("[v0] Loaded events:", data?.length)
 
       if (data) {
+        // Role-based filtering:
+        // - owner / manager / strategist: see all events
+        // - creator: only see events assigned to them, created by them, or where they are on the team
+        // - editor / viewer: can see all (view-only)
+        let filteredEvents = data
+
+        if (userRole === "creator") {
+          filteredEvents = data.filter((event: any) => {
+            const isAssignedToCreator = event.assigned_to === user?.id
+            const isCreatedByCreator = event.created_by === user?.id
+            const isOnTeam = event.event_team_members?.some(
+              (tm: { user_id: string }) => tm.user_id === user?.id,
+            )
+            return isAssignedToCreator || isCreatedByCreator || isOnTeam
+          })
+        }
+
+        console.log("[v0] Monthly filtered events for", userRole, ":", filteredEvents.length)
+
         // Fetch user profiles separately for team members
-        const userIds = data.flatMap((event) => event.event_team_members?.map((tm: any) => tm.user_id) || [])
+        const userIds = filteredEvents.flatMap(
+          (event: any) => event.event_team_members?.map((tm: any) => tm.user_id) || [],
+        )
         const uniqueUserIds = [...new Set(userIds)]
 
         const { data: profiles } = await supabase
@@ -189,7 +212,7 @@ function DashboardContent() {
         // Map profiles to team members
         const profileMap = new Map(profiles?.map((p) => [p.id, p]) || [])
 
-        const eventsWithProfiles = data.map((event) => ({
+        const eventsWithProfiles = filteredEvents.map((event: any) => ({
           ...event,
           event_team_members:
             event.event_team_members?.map((tm: any) => ({

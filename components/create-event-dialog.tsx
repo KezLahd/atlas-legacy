@@ -281,6 +281,7 @@ export function CreateEventDialog({
           location: location || null,
           start_time: startDateTime.toISOString(),
           end_time: endDateTime.toISOString(),
+          assigned_to: selectedTeamMembers.length > 0 ? selectedTeamMembers[0] : null,
           created_by: userId,
         })
         .select()
