@@ -252,7 +252,7 @@ export function EditContentDialog({
       }
 
       if (isStorytellingPillarSelected() && storytellingFormat !== "none") {
-        contentData.storytelling_format = storytellingFormat
+        contentData.storytelling_format_id = storytellingFormat
       }
 
       // Track changes for audit log

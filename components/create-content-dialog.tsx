@@ -457,7 +457,7 @@ export function CreateContentDialog({
       }
 
       if (isStorytellingPillarSelected() && storytellingFormat !== "none") {
-        contentData.storytelling_format = storytellingFormat
+        contentData.storytelling_format_id = storytellingFormat
       }
 
       const { data: newContent, error: contentError } = await supabase
