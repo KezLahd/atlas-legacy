@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { AppNav } from "@/components/app-nav"
@@ -13,6 +13,7 @@ import { CreateEventDialog } from "@/components/create-event-dialog"
 import { CalendarMemberFilter } from "@/components/calendar-member-filter"
 import type { CalendarEvent, Creator } from "@/lib/types/database"
 import { cn } from "@/lib/utils"
+import Loading from "./loading"
 
 interface EventWithDetails extends CalendarEvent {
   content: { hook: string } | null
@@ -30,7 +31,7 @@ interface EventWithDetails extends CalendarEvent {
   }>
 }
 
-export default function DailyViewPage() {
+function DailyViewContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const supabase = createClient()
@@ -654,5 +655,13 @@ export default function DailyViewPage() {
 
       <Footer />
     </div>
+  )
+}
+
+export default function DailyViewPage() {
+  return (
+    <Suspense fallback={<Loading />}>
+      <DailyViewContent />
+    </Suspense>
   )
 }

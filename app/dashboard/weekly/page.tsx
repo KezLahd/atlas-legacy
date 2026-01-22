@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { AppNav } from "@/components/app-nav"
@@ -12,6 +12,7 @@ import { CalendarMemberFilter } from "@/components/calendar-member-filter"
 import type { CalendarEvent, Creator, Batch } from "@/lib/types/database"
 import { HoverCard, HoverCardTrigger } from "@/components/ui/hover-card"
 import { Card, CardContent } from "@/components/ui/card"
+import Loading from "./loading"
 
 interface EventWithDetails extends CalendarEvent {
   content: { hook: string } | null
@@ -21,7 +22,7 @@ interface EventWithDetails extends CalendarEvent {
   location?: string
 }
 
-export default function WeeklyViewPage() {
+function WeeklyViewContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const supabase = createClient()
@@ -498,5 +499,13 @@ export default function WeeklyViewPage() {
 
       <Footer />
     </div>
+  )
+}
+
+export default function WeeklyViewPage() {
+  return (
+    <Suspense fallback={<Loading />}>
+      <WeeklyViewContent />
+    </Suspense>
   )
 }

@@ -3,9 +3,8 @@
 import type React from "react"
 import { Plus } from "lucide-react"
 
-import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
-import { Suspense } from "react"
+import { useEffect, useState, Suspense } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { AppNav } from "@/components/app-nav"
 import { Footer } from "@/components/footer"
@@ -56,15 +55,17 @@ function DashboardContent() {
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null)
   const canFilter = ["owner", "manager", "strategist"].includes(userRole)
 
-  const searchParams = new URLSearchParams(window.location.search)
+  const searchParams = useSearchParams()
 
   useEffect(() => {
     loadData()
     // Redirect to weekly view on mobile screens
-    const isMobile = window.innerWidth < 768
-    if (isMobile) {
-      const today = new Date()
-      router.push(`/dashboard/weekly?date=${today.toISOString()}`)
+    if (typeof window !== 'undefined') {
+      const isMobile = window.innerWidth < 768
+      if (isMobile) {
+        const today = new Date()
+        router.push(`/dashboard/weekly?date=${today.toISOString()}`)
+      }
     }
   }, [])
 
