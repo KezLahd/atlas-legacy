@@ -1,13 +1,17 @@
+import { Card } from "@/components/ui/card"
+import { CardHeader } from "@/components/ui/card"
 import { redirect, notFound } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { Footer } from "@/components/footer"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { CardContent, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { ArrowLeft, Calendar, FileText } from "lucide-react"
 import { ContentCharts, PlatformChart } from "./content-charts"
 import { CreatorDetails } from "./creator-details"
+import { DeleteCreatorDialog } from "@/components/delete-creator-dialog"
+import { Separator } from "@/components/ui/separator"
 
 export const dynamic = 'force-dynamic'
 
@@ -55,15 +59,15 @@ export default async function CreatorDetailPage({ params }: { params: Promise<{ 
 
   // Get content for this creator with more details
   const { data: content } = await supabase
-    .from("content")
-    .select(`
-      *,
-      content_platforms(platforms(name)),
-      content_content_pillars(content_pillars(name)),
-      analytics(views, likes, shares, saves, follows)
-    `)
-    .eq("creator_id", id)
-    .order("updated_at", { ascending: false })
+  .from("content")
+  .select(`
+  *,
+  content_platforms(platforms(name)),
+  content_content_pillars(content_pillars(name)),
+  analytics(views, shares, saves, follows)
+  `)
+  .eq("creator_id", id)
+  .order("updated_at", { ascending: false })
 
   // Get content counts by stage
   const { count: totalContent } = await supabase
@@ -257,6 +261,43 @@ export default async function CreatorDetailPage({ params }: { params: Promise<{ 
     : { data: null }
 
   const canEdit = Boolean(isAdmin || creatorAccessRow?.id)
+  
+  // Check if current user is the creator (user_id matches)
+  const isCreatorUser = creator.user_id === user.id
+  
+  // Get batch assignment count for this creator (where creator is assigned TO batches)
+  const { count: batchAssignmentCount } = await supabase
+    .from("batch_creators")
+    .select("*", { count: "exact", head: true })
+    .eq("creator_id", id)
+
+  // Get SFX & B-Roll count created BY this user
+  const { count: sfxCount } = await supabase
+    .from("sfx_reference")
+    .select("*", { count: "exact", head: true })
+    .eq("user_id", user.id)
+  
+  const { count: brollCount } = await supabase
+    .from("broll_reference")
+    .select("*", { count: "exact", head: true })
+    .eq("user_id", user.id)
+  
+  const sfxBrollCount = (sfxCount || 0) + (brollCount || 0)
+
+  // Get batches created BY this user (batches don't have created_by, so count by workspace)
+  const { count: batchesCreatedCount } = await supabase
+    .from("batches")
+    .select("*", { count: "exact", head: true })
+    .eq("workspace_id", creator.workspace_id)
+
+  // Get calendar events created BY this user
+  const { count: calendarEventsCreatedCount } = await supabase
+    .from("calendar_events")
+    .select("*", { count: "exact", head: true })
+    .eq("created_by", user.id)
+
+  // Declare batchCount variable
+  const batchCount = batchAssignmentCount;
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -315,55 +356,69 @@ export default async function CreatorDetailPage({ params }: { params: Promise<{ 
 
             {/* Upcoming Schedule */}
             {upcomingEvents.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Upcoming Posts</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {upcomingEvents.slice(0, 5).map((event: any) => {
-                      const eventDate = new Date(event.start_time)
-                      return (
-                        <div key={event.id} className="flex items-start gap-3 p-2 rounded-lg border">
-                          <div className="flex-shrink-0 mt-0.5">
-                            <Calendar className="size-4 text-muted-foreground" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium line-clamp-1">{event.content?.hook || event.title || "Untitled"}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {eventDate.toLocaleDateString()} at {eventDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </p>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </CardContent>
-              </Card>
+              <div className="flex items-start gap-3 p-2 rounded-lg border">
+                <div className="flex-shrink-0 mt-0.5">
+                  <Calendar className="size-4 text-muted-foreground" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium line-clamp-1">{upcomingEvents[0].content?.hook || upcomingEvents[0].title || "Untitled"}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {new Date(upcomingEvents[0].start_time).toLocaleDateString()} at {new Date(upcomingEvents[0].start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                </div>
+              </div>
             )}
 
             {/* Series */}
             {series && series.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Series</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    {series.map((s) => (
-                      <div key={s.id} className="flex items-center justify-between p-2 border rounded-lg">
-                        <div>
-                          <p className="font-medium text-sm">{s.name}</p>
-                          <p className="text-xs text-muted-foreground capitalize">{s.type?.replace("_", " ") || ""}</p>
-                        </div>
-                      </div>
-                    ))}
+              <div className="space-y-2">
+                {series.map((s) => (
+                  <div key={s.id} className="flex items-center justify-between p-2 border rounded-lg">
+                    <div>
+                      <p className="font-medium text-sm">{s.name}</p>
+                      <p className="text-xs text-muted-foreground capitalize">{s.type?.replace("_", " ") || ""}</p>
+                    </div>
                   </div>
-                </CardContent>
-              </Card>
+                ))}
+              </div>
             )}
           </div>
         </div>
+
+        {/* Danger Zone - Only visible to owners/managers */}
+        {isAdmin && (
+          <Card className="border-destructive bg-white dark:bg-white">
+            <CardHeader className="border-b border-destructive">
+              <CardTitle className="text-destructive">Danger Zone</CardTitle>
+              <CardDescription className="text-muted-foreground">
+                Irreversible actions for this creator
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4 pt-6">
+              <div>
+                <h3 className="font-semibold mb-2 text-foreground">Delete Creator</h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  {isCreatorUser 
+                    ? "Remove yourself as a creator. Your user account will remain active, but all creator-specific data will be deleted."
+                    : `Permanently delete ${creator.name} and all associated data including content, series, and settings.`
+                  }
+                </p>
+                <DeleteCreatorDialog
+                  creatorId={creator.id}
+                  creatorName={creator.name}
+                  isOwner={isCreatorUser}
+                  userId={user.id}
+                  contentCount={totalContent || 0}
+                  seriesCount={series?.length || 0}
+                  batchAssignmentCount={batchAssignmentCount || 0}
+                  sfxBrollCount={sfxBrollCount}
+                  batchesCreatedCount={batchesCreatedCount || 0}
+                  calendarEventsCreatedCount={calendarEventsCreatedCount || 0}
+                />
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </main>
 
       <Footer />

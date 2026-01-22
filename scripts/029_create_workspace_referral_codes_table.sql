@@ -35,4 +35,3 @@ CREATE POLICY "Workspace members can view referral codes" ON workspace_referral_
 -- Let's make it so anyone can select, but we'll validate server-side
 CREATE POLICY "Anyone can view referral codes for validation" ON workspace_referral_codes
   FOR SELECT USING (true);
-

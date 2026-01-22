@@ -44,4 +44,3 @@ CREATE INDEX IF NOT EXISTS idx_research_audit_log_created_at ON research_audit_l
 CREATE INDEX IF NOT EXISTS idx_research_audit_log_action ON research_audit_log(action);
 
 COMMIT;
-

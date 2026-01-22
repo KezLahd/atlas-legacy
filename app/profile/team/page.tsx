@@ -26,6 +26,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { upgradeWorkspaceType, generateReferralCodes, getWorkspaceMembersWithEmails } from "@/app/actions/workspace"
 import { useToast } from "@/hooks/use-toast"
+import { DeleteTeamMemberDialog } from "@/components/delete-team-member-dialog"
 
 export default function TeamPage() {
   const router = useRouter()
@@ -34,6 +35,7 @@ export default function TeamPage() {
   const [members, setMembers] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [workspace, setWorkspace] = useState<any>(null)
+  const [currentUserRole, setCurrentUserRole] = useState<string | null>(null)
   const [showUpgradeDialog, setShowUpgradeDialog] = useState(false)
   const [isUpgrading, setIsUpgrading] = useState(false)
   const [referralCodes, setReferralCodes] = useState<Array<{ role: string; referral_code: string }>>([])
@@ -76,6 +78,8 @@ export default function TeamPage() {
         router.push("/onboarding")
         return
       }
+      
+      setCurrentUserRole(membership.role)
 
       const { data: workspaceData } = await supabase
         .from("workspaces")
@@ -1056,35 +1060,56 @@ export default function TeamPage() {
             </Button>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {members?.map((member: any) => (
-              <Card key={member.id} className="flex flex-col items-center p-6">
-                <CardContent className="flex flex-col items-center space-y-3 pt-6">
-                  {member.user_profiles ? (
-                    <UserAvatar 
-                      profile={member.user_profiles} 
-                      size="lg"
-                    />
-                  ) : (
-                    <div className="size-16 rounded-full bg-muted flex items-center justify-center text-xl font-semibold">
-                      U
-                    </div>
-                  )}
-                  <div className="text-center">
-                    <p className="font-medium text-base">
-                      {member.user_profiles?.first_name && member.user_profiles?.last_name
-                        ? `${member.user_profiles.first_name} ${member.user_profiles.last_name}`
-                        : member.user_profiles?.email || (user?.id === member.user_id ? user?.email : "Unknown User")}
-                    </p>
-                  </div>
-                  <Badge variant="outline" className="capitalize">
-                    {member.role}
-                  </Badge>
-                  <p className="text-sm text-muted-foreground">
-                    Joined {new Date(member.created_at).toLocaleDateString()}
-                  </p>
-                </CardContent>
-              </Card>
-              ))}
+              {members?.map((member: any) => {
+                const isCurrentUser = user?.id === member.user_id
+                const canDeleteMember = currentUserRole === "owner" || currentUserRole === "manager"
+                
+                return (
+                  <Card key={member.id} className="flex flex-col items-center p-6 relative">
+                    {canDeleteMember && (
+                      <div className="absolute top-3 right-3">
+                        <DeleteTeamMemberDialog
+                          memberId={member.id}
+                          userId={member.user_id}
+                          memberName={
+                            member.user_profiles?.first_name && member.user_profiles?.last_name
+                              ? `${member.user_profiles.first_name} ${member.user_profiles.last_name}`
+                              : member.user_profiles?.email || "Unknown User"
+                          }
+                          memberEmail={member.user_profiles?.email || ""}
+                          workspaceId={workspace?.id || ""}
+                          isCurrentUser={isCurrentUser}
+                        />
+                      </div>
+                    )}
+                    <CardContent className="flex flex-col items-center space-y-3 pt-6">
+                      {member.user_profiles ? (
+                        <UserAvatar 
+                          profile={member.user_profiles} 
+                          size="lg"
+                        />
+                      ) : (
+                        <div className="size-16 rounded-full bg-muted flex items-center justify-center text-xl font-semibold">
+                          U
+                        </div>
+                      )}
+                      <div className="text-center">
+                        <p className="font-medium text-base">
+                          {member.user_profiles?.first_name && member.user_profiles?.last_name
+                            ? `${member.user_profiles.first_name} ${member.user_profiles.last_name}`
+                            : member.user_profiles?.email || (user?.id === member.user_id ? user?.email : "Unknown User")}
+                        </p>
+                      </div>
+                      <Badge variant="outline" className="capitalize">
+                        {member.role}
+                      </Badge>
+                      <p className="text-sm text-muted-foreground">
+                        Joined {new Date(member.created_at).toLocaleDateString()}
+                      </p>
+                    </CardContent>
+                  </Card>
+                )
+              })}
             </div>
         </div>
         

@@ -6,4 +6,3 @@ ADD COLUMN IF NOT EXISTS research_id UUID REFERENCES research(id) ON DELETE SET 
 CREATE INDEX IF NOT EXISTS idx_content_research_id ON content(research_id);
 
 COMMIT;
-

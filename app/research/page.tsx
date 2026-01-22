@@ -16,6 +16,9 @@ import { EditResearchDialog } from "@/components/edit-research-dialog"
 import { UpdateResearchMetricsDialog } from "@/components/update-research-metrics-dialog"
 import { CreateContentDialog } from "@/components/create-content-dialog"
 import type { Research, Platform, Creator } from "@/lib/types/database"
+import { useSearchParams } from "next/navigation"
+import { Suspense } from "react"
+import Loading from "./loading"
 
 interface ResearchWithDetails extends Research {
   platforms: { id: string; name: string }
@@ -42,6 +45,8 @@ export default function ResearchPage() {
   const [selectedHookType, setSelectedHookType] = useState<string>("all")
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
   const [trendData, setTrendData] = useState<Record<string, any[]>>({})
+
+  const searchParams = useSearchParams()
 
   useEffect(() => {
     loadData()
@@ -389,34 +394,113 @@ export default function ResearchPage() {
     <div className="min-h-screen bg-background">
       <AppNav userEmail={user?.email} />
 
-      <main className="container mx-auto p-6 space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold">Research</h1>
-            <p className="text-muted-foreground">Deconstruct viral content and learn what works</p>
-          </div>
-          <CreateResearchDialog
-            workspaceId={workspaceId}
-            workspacePlatforms={workspacePlatforms}
-            contentPillars={contentPillars}
-            onResearchCreated={() => loadResearch(workspaceId)}
-          />
-        </div>
-
-        <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
-          {/* Search bar - left aligned, increased width */}
-          <div className="relative flex-1 min-w-[200px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-            <Input
-              placeholder="Search by creator, platform, pillar, hook..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 bg-white"
+      <Suspense fallback={<Loading />}>
+        <main className="container mx-auto p-6 space-y-6">
+          {/* Desktop: Title with description */}
+          <div className="hidden sm:flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold">Research</h1>
+              <p className="text-muted-foreground">Deconstruct viral content and learn what works</p>
+            </div>
+            <CreateResearchDialog
+              workspaceId={workspaceId}
+              workspacePlatforms={workspacePlatforms}
+              contentPillars={contentPillars}
+              onResearchCreated={() => loadResearch(workspaceId)}
             />
           </div>
 
-          {/* Filter buttons - right aligned, reduced width, wraps when needed */}
-          <div className="flex flex-wrap gap-2 justify-end">
+          {/* Mobile: Create button only */}
+          <div className="sm:hidden flex items-center">
+            <CreateResearchDialog
+              workspaceId={workspaceId}
+              workspacePlatforms={workspacePlatforms}
+              contentPillars={contentPillars}
+              onResearchCreated={() => loadResearch(workspaceId)}
+            />
+          </div>
+
+          {/* Mobile: Search bar full width, filters below in 2x2 grid */}
+          <div className="sm:hidden space-y-3">
+            <div className="relative w-full">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+              <Input
+                placeholder="Search by creator, platform, pillar, hook..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9 bg-white w-full"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <Select value={selectedVirality} onValueChange={setSelectedVirality}>
+                <SelectTrigger className="w-full hover:bg-accent/20 transition-colors bg-white">
+                  <SelectValue placeholder="Virality" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Virality</SelectItem>
+                  <SelectItem value="blockbuster">Blockbuster</SelectItem>
+                  <SelectItem value="viral">Viral</SelectItem>
+                  <SelectItem value="breakout">Breakout</SelectItem>
+                  <SelectItem value="steady">Steady</SelectItem>
+                  <SelectItem value="dormant">Dormant</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select value={selectedPlatform} onValueChange={setSelectedPlatform}>
+                <SelectTrigger className="w-full hover:bg-accent/20 transition-colors bg-white">
+                  <SelectValue placeholder="Platform" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Platforms</SelectItem>
+                  {workspacePlatforms.map((platform) => (
+                    <SelectItem key={platform.id} value={platform.name}>
+                      {platform.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={selectedPillar} onValueChange={setSelectedPillar}>
+                <SelectTrigger className="w-full hover:bg-accent/20 transition-colors bg-white">
+                  <SelectValue placeholder="Pillar" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Pillars</SelectItem>
+                  {contentPillars.map((pillar) => (
+                    <SelectItem key={pillar.id} value={pillar.name}>
+                      {pillar.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={selectedHookType} onValueChange={setSelectedHookType}>
+                <SelectTrigger className="w-full hover:bg-accent/20 transition-colors bg-white">
+                  <SelectValue placeholder="Hook Type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Hooks</SelectItem>
+                  <SelectItem value="written">Written</SelectItem>
+                  <SelectItem value="visual">Visual</SelectItem>
+                  <SelectItem value="verbal">Verbal</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Desktop: Search bar and filters on same row */}
+          <div className="hidden sm:flex items-center gap-2">
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+              <Input
+                placeholder="Search by creator, platform, pillar, hook..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9 bg-white"
+              />
+            </div>
+
             <Select value={selectedVirality} onValueChange={setSelectedVirality}>
               <SelectTrigger className="w-[130px] hover:bg-accent/20 transition-colors bg-white">
                 <SelectValue placeholder="Virality" />
@@ -463,57 +547,56 @@ export default function ResearchPage() {
               <SelectTrigger className="w-[130px] hover:bg-accent/20 transition-colors bg-white">
                 <SelectValue placeholder="Hook Type" />
               </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Hooks</SelectItem>
-                    <SelectItem value="written">Written</SelectItem>
-                    <SelectItem value="visual">Visual</SelectItem>
-                    <SelectItem value="verbal">Verbal</SelectItem>
-                  </SelectContent>
+              <SelectContent>
+                <SelectItem value="all">All Hooks</SelectItem>
+                <SelectItem value="written">Written</SelectItem>
+                <SelectItem value="visual">Visual</SelectItem>
+                <SelectItem value="verbal">Verbal</SelectItem>
+              </SelectContent>
             </Select>
           </div>
-        </div>
 
-        <div className="border rounded-lg overflow-hidden bg-white">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-accent hover:bg-accent">
-                <TableHead className="text-white w-8"></TableHead>
-                <TableHead className="text-white w-24">Thumbnail</TableHead>
-                <TableHead className="text-white w-20 text-center">Platform</TableHead>
-                <TableHead className="text-white w-28">Creator</TableHead>
-                <TableHead className="text-white w-24">Views</TableHead>
-                <TableHead className="text-white w-28">Virality</TableHead>
-                <TableHead className="text-white w-32">Pillar</TableHead>
-                <TableHead className="text-white w-32">Style</TableHead>
-                <TableHead className="text-white">Hook</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading ? (
-                <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
-                    Loading research...
-                  </TableCell>
+          <div className="border rounded-lg overflow-hidden bg-white">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-accent hover:bg-accent">
+                  <TableHead className="text-white w-8"></TableHead>
+                  <TableHead className="text-white w-24">Thumbnail</TableHead>
+                  <TableHead className="text-white w-20 text-center">Platform</TableHead>
+                  <TableHead className="text-white w-28">Creator</TableHead>
+                  <TableHead className="text-white w-24">Views</TableHead>
+                  <TableHead className="text-white w-28">Virality</TableHead>
+                  <TableHead className="text-white w-32">Pillar</TableHead>
+                  <TableHead className="text-white w-32">Style</TableHead>
+                  <TableHead className="text-white">Hook</TableHead>
                 </TableRow>
-              ) : filteredResearch.length > 0 ? (
-                filteredResearch.map((item) => {
-                  const platformIcon = getPlatformIcon(item.platforms.name)
-                  const isExpanded = expandedRows.has(item.id)
-                  return (
-                    <React.Fragment key={item.id}>
-                      <TableRow
-                        className="cursor-pointer hover:bg-accent/10 transition-colors"
-                        onClick={() => toggleExpanded(item.id)}
-                    >
-                        <TableCell>
-                          <Button variant="ghost" size="sm" className="p-0 h-6 w-6">
-                            {isExpanded ? (
-                              <ChevronDown className="size-4" />
-                            ) : (
-                              <ChevronRight className="size-4" />
-                            )}
-                          </Button>
-                        </TableCell>
+              </TableHeader>
+              <TableBody>
+                {isLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                      Loading research...
+                    </TableCell>
+                  </TableRow>
+                ) : filteredResearch.length > 0 ? (
+                  filteredResearch.map((item) => {
+                    const platformIcon = getPlatformIcon(item.platforms.name)
+                    const isExpanded = expandedRows.has(item.id)
+                    return (
+                      <React.Fragment key={item.id}>
+                        <TableRow
+                          className="cursor-pointer hover:bg-accent/10 transition-colors"
+                          onClick={() => toggleExpanded(item.id)}
+                        >
+                          <TableCell>
+                            <Button variant="ghost" size="sm" className="p-0 h-6 w-6">
+                              {isExpanded ? (
+                                <ChevronDown className="size-4" />
+                              ) : (
+                                <ChevronRight className="size-4" />
+                              )}
+                            </Button>
+                          </TableCell>
                           <TableCell className="py-0">
                             {item.thumbnail_url && item.link ? (
                               <a
@@ -591,114 +674,113 @@ export default function ResearchPage() {
                                   {/* Left Column - Content Details and Timestamps */}
                                   <div className="flex flex-col space-y-4">
                                     <div className="flex-1">
-
-                                    <div>
-                                      <h5 className="font-semibold mb-3">Content Details</h5>
-                                      <div className="space-y-2 text-sm">
-                                        <div>
-                                          <span className="text-muted-foreground">Format:</span>{" "}
-                                          <span className="font-medium capitalize">{item.content_format || item.format || "Unknown"}</span>
-                                        </div>
-                                        <div>
-                                          <span className="text-muted-foreground">Production:</span>{" "}
-                                          <span className="font-medium">{
-                                            item.production_elements ||
-                                            [item.has_sfx && "SFX", item.has_broll && "B-Roll", item.has_music && "Music"]
-                                              .filter(Boolean)
-                                              .join(", ") ||
-                                            "Not specified"
-                                          }</span>
-                                        </div>
-                                        <div>
-                                          <span className="text-muted-foreground">Avg Clip Length:</span>{" "}
-                                          <span className="font-medium">{(item.average_clip_seconds || item.avg_seconds_per_clip) ? `${item.average_clip_seconds || item.avg_seconds_per_clip}s` : "-"}</span>
-                                        </div>
-                                        {item.link && (
+                                      <div>
+                                        <h5 className="font-semibold mb-3">Content Details</h5>
+                                        <div className="space-y-2 text-sm">
                                           <div>
-                                            <span className="text-muted-foreground">Video Link:</span>{" "}
-                                            <a
-                                              href={item.link}
-                                              target="_blank"
-                                              rel="noopener noreferrer"
-                                              className="font-medium text-primary hover:text-primary/80 underline"
-                                            >
-                                              View Original
-                                            </a>
+                                            <span className="text-muted-foreground">Format:</span>{" "}
+                                            <span className="font-medium capitalize">{item.content_format || item.format || "Unknown"}</span>
                                           </div>
-                                        )}
-                                      </div>
-                                    </div>
-
-                                    <div className="pt-4">
-                                      <h5 className="font-semibold mb-3">Timestamps</h5>
-                                      <div className="space-y-2 text-sm">
-                                        <div>
-                                          <span className="text-muted-foreground">Posted:</span>{" "}
-                                          <span className="font-medium">
-                                            {item.created_at
-                                              ? new Date(item.created_at).toLocaleDateString("en-AU", {
-                                                  day: "2-digit",
-                                                  month: "2-digit",
-                                                  year: "numeric",
-                                                })
-                                              : "-"}
-                                          </span>
-                                        </div>
-                                        <div>
-                                          <span className="text-muted-foreground">Last Updated:</span>{" "}
-                                          <span className="font-medium">
-                                            {item.updated_at
-                                              ? new Date(item.updated_at).toLocaleDateString("en-AU", {
-                                                  day: "2-digit",
-                                                  month: "2-digit",
-                                                  year: "numeric",
-                                                })
-                                              : "-"}
-                                          </span>
+                                          <div>
+                                            <span className="text-muted-foreground">Production:</span>{" "}
+                                            <span className="font-medium">{
+                                              item.production_elements ||
+                                              [item.has_sfx && "SFX", item.has_broll && "B-Roll", item.has_music && "Music"]
+                                                .filter(Boolean)
+                                                .join(", ") ||
+                                              "Not specified"
+                                            }</span>
+                                          </div>
+                                          <div>
+                                            <span className="text-muted-foreground">Avg Clip Length:</span>{" "}
+                                            <span className="font-medium">{(item.average_clip_seconds || item.avg_seconds_per_clip) ? `${item.average_clip_seconds || item.avg_seconds_per_clip}s` : "-"}</span>
+                                          </div>
+                                          {item.link && (
+                                            <div>
+                                              <span className="text-muted-foreground">Video Link:</span>{" "}
+                                              <a
+                                                href={item.link}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="font-medium text-primary hover:text-primary/80 underline"
+                                              >
+                                                View Original
+                                              </a>
+                                            </div>
+                                          )}
                                         </div>
                                       </div>
-                                    </div>
 
-                                    {/* Followers with change since first recording */}
-                                    {trendData[item.id] && trendData[item.id].length > 1 && (() => {
-                                      const firstRecording = trendData[item.id].find((point: any) => !point.isStartPoint)
-                                      const latestRecording = trendData[item.id][trendData[item.id].length - 1]
-                                      const firstFollowers = firstRecording?.followers || item.followers || 0
-                                      const latestFollowers = latestRecording?.followers || item.followers || 0
-                                      const followerChange = latestFollowers - firstFollowers
-
-                                      const formatNumber = (num: number) => {
-                                        if (num >= 1000000) {
-                                          return `${(num / 1000000).toFixed(1)}M`
-                                        } else if (num >= 1000) {
-                                          return `${(num / 1000).toFixed(1)}k`
-                                        }
-                                        return num.toString()
-                                      }
-
-                                      return (
-                                        <div className="pt-4">
-                                          <div className="text-sm">
-                                            <span className="font-semibold">Followers:</span>{" "}
-                                            <span className="font-medium">{formatNumber(latestFollowers)}</span>{" "}
-                                            <span className={`font-medium ${followerChange >= 0 ? "text-green-600" : "text-red-600"}`}>
-                                              ({followerChange >= 0 ? "+" : ""}{formatNumber(Math.abs(followerChange))} since first record)
+                                      <div className="pt-4">
+                                        <h5 className="font-semibold mb-3">Timestamps</h5>
+                                        <div className="space-y-2 text-sm">
+                                          <div>
+                                            <span className="text-muted-foreground">Posted:</span>{" "}
+                                            <span className="font-medium">
+                                              {item.created_at
+                                                ? new Date(item.created_at).toLocaleDateString("en-AU", {
+                                                    day: "2-digit",
+                                                    month: "2-digit",
+                                                    year: "numeric",
+                                                  })
+                                                : "-"}
+                                            </span>
+                                          </div>
+                                          <div>
+                                            <span className="text-muted-foreground">Last Updated:</span>{" "}
+                                            <span className="font-medium">
+                                              {item.updated_at
+                                                ? new Date(item.updated_at).toLocaleDateString("en-AU", {
+                                                    day: "2-digit",
+                                                    month: "2-digit",
+                                                    year: "numeric",
+                                                  })
+                                                : "-"}
                                             </span>
                                           </div>
                                         </div>
-                                      )
-                                    })()}
+                                      </div>
+
+                                      {/* Followers with change since first recording */}
+                                      {trendData[item.id] && trendData[item.id].length > 1 && (() => {
+                                        const firstRecording = trendData[item.id].find((point: any) => !point.isStartPoint)
+                                        const latestRecording = trendData[item.id][trendData[item.id].length - 1]
+                                        const firstFollowers = firstRecording?.followers || item.followers || 0
+                                        const latestFollowers = latestRecording?.followers || item.followers || 0
+                                        const followerChange = latestFollowers - firstFollowers
+
+                                        const formatNumber = (num: number) => {
+                                          if (num >= 1000000) {
+                                            return `${(num / 1000000).toFixed(1)}M`
+                                          } else if (num >= 1000) {
+                                            return `${(num / 1000).toFixed(1)}k`
+                                          }
+                                          return num.toString()
+                                        }
+
+                                        return (
+                                          <div className="pt-4">
+                                            <div className="text-sm">
+                                              <span className="font-semibold">Followers:</span>{" "}
+                                              <span className="font-medium">{formatNumber(latestFollowers)}</span>{" "}
+                                              <span className={`font-medium ${followerChange >= 0 ? "text-green-600" : "text-red-600"}`}>
+                                                ({followerChange >= 0 ? "+" : ""}{formatNumber(Math.abs(followerChange))} since first record)
+                                              </span>
+                                            </div>
+                                          </div>
+                                        )
+                                      })()}
                                     </div>
                                     {/* Edit and Templatise buttons at bottom left */}
                                     <div className="flex justify-start gap-2 mt-auto">
                                       <div className="[&_button]:bg-accent [&_button]:hover:bg-accent/90 [&_button]:text-accent-foreground">
-                          <EditResearchDialog
-                            research={item}
-                            workspaceId={workspaceId}
-                            workspacePlatforms={workspacePlatforms}
-                            contentPillars={contentPillars}
-                            onResearchUpdated={() => {
-                              loadResearch(workspaceId)
+                                        <EditResearchDialog
+                                          research={item}
+                                          workspaceId={workspaceId}
+                                          workspacePlatforms={workspacePlatforms}
+                                          contentPillars={contentPillars}
+                                          onResearchUpdated={() => {
+                                            loadResearch(workspaceId)
                                           }}
                                         />
                                       </div>
@@ -860,7 +942,7 @@ export default function ResearchPage() {
                                                     isAnimationActive={false}
                                                     legendType="none"
                                                     connectNulls={false}
-                          />
+                                                  />
                                                 </>
                                               )}
                                               {/* Solid line for actual recorded data points */}
@@ -901,13 +983,13 @@ export default function ResearchPage() {
                                     {/* Update Metrics button at bottom left */}
                                     <div className="flex justify-start mt-auto">
                                       <div className="[&_button]:bg-accent [&_button]:hover:bg-accent/90 [&_button]:text-accent-foreground">
-                          <UpdateResearchMetricsDialog
-                            research={item}
-                            onMetricsUpdated={() => {
-                              loadResearch(workspaceId)
-                            }}
-                          />
-                        </div>
+                                        <UpdateResearchMetricsDialog
+                                          research={item}
+                                          onMetricsUpdated={() => {
+                                            loadResearch(workspaceId)
+                                          }}
+                                        />
+                                      </div>
                                     </div>
                                   </div>
                                 </div>
@@ -916,72 +998,32 @@ export default function ResearchPage() {
                           </TableRow>
                         )}
                       </React.Fragment>
-                  )
-                })
-              ) : (
-                <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8">
-                    <p className="text-muted-foreground mb-4">
-                      {research.length > 0
-                        ? "No research matches your current filters."
-                        : "No research yet. Start analyzing viral content!"}
-                    </p>
-                    {research.length === 0 && (
-                    <CreateResearchDialog
-                      workspaceId={workspaceId}
-                      workspacePlatforms={workspacePlatforms}
-                      contentPillars={contentPillars}
-                      onResearchCreated={() => loadResearch(workspaceId)}
-                    />
-                    )}
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      </main>
-
-      {showTemplatiseDialog && templatisingResearch && (
-        <CreateContentDialog
-          workspaceId={workspaceId}
-          creators={creators}
-          workspaceType={workspaceType}
-          open={showTemplatiseDialog}
-          onOpenChange={setShowTemplatiseDialog}
-          initialValues={{
-            hook: (() => {
-              const creatorUsername = (templatisingResearch as any).creator_username || ""
-              const hook = templatisingResearch.hook || ""
-              const hookType = (templatisingResearch as any).hook_type || ""
-              
-              let formattedHook = ""
-              if (creatorUsername) {
-                const creatorWithAt = creatorUsername.startsWith("@") ? creatorUsername : `@${creatorUsername}`
-                formattedHook = `${creatorWithAt}: ${hook}`
-              } else {
-                formattedHook = hook
-              }
-              
-              if (hookType) {
-                formattedHook = `${formattedHook} (${hookType})`
-              }
-              
-              return formattedHook
-            })(),
-            creatorUsername: (templatisingResearch as any).creator_username || undefined,
-            platforms: (templatisingResearch as any).platform_id ? [(templatisingResearch as any).platform_id] : [],
-            format: (templatisingResearch as any).format || undefined,
-            pillarId: (templatisingResearch as any).content_pillar_id || templatisingResearch.content_pillars?.id || undefined,
-            style: (templatisingResearch as any).content_style || undefined,
-            researchId: templatisingResearch.id,
-          }}
-          onContentCreated={() => {
-            setShowTemplatiseDialog(false)
-            setTemplatisingResearch(null)
-          }}
-        />
-      )}
+                    )
+                  })
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={9} className="text-center py-8">
+                      <p className="text-muted-foreground mb-4">
+                        {research.length > 0
+                          ? "No research matches your current filters."
+                          : "No research yet. Start analyzing viral content!"}
+                      </p>
+                      {research.length === 0 && (
+                        <CreateResearchDialog
+                          workspaceId={workspaceId}
+                          workspacePlatforms={workspacePlatforms}
+                          contentPillars={contentPillars}
+                          onResearchCreated={() => loadResearch(workspaceId)}
+                        />
+                      )}
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </main>
+      </Suspense>
     </div>
   )
 }

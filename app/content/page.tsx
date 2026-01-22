@@ -554,13 +554,13 @@ export default function ContentPage() {
 
   const getStageColor = (stage: ProductionStage) => {
     const colors = {
-      idea: "bg-red-100 text-red-800 border-red-200",
-      scripted: "bg-orange-100 text-orange-800 border-orange-200",
-      approved: "bg-yellow-100 text-yellow-800 border-yellow-200",
-      scheduled: "bg-lime-100 text-lime-800 border-lime-200",
-      shot: "bg-green-100 text-green-800 border-green-200",
-      edited: "bg-emerald-100 text-emerald-800 border-emerald-200",
-      posted: "bg-teal-100 text-teal-800 border-teal-200",
+      idea: "bg-red-500 text-white border-red-600",
+      scripted: "bg-red-400 text-white border-red-500",
+      approved: "bg-orange-400 text-white border-orange-500",
+      scheduled: "bg-orange-300 text-white border-orange-400",
+      shot: "bg-yellow-400 text-gray-900 border-yellow-500",
+      edited: "bg-lime-400 text-gray-900 border-lime-500",
+      posted: "bg-green-500 text-white border-green-600",
     }
     return colors[stage] || "bg-gray-100 text-gray-800"
   }
@@ -568,12 +568,12 @@ export default function ContentPage() {
   const getStageBgColor = (stage: ProductionStage) => {
     const colors = {
       idea: "bg-red-50 md:bg-transparent",
-      scripted: "bg-orange-50 md:bg-transparent",
-      approved: "bg-yellow-50 md:bg-transparent",
-      scheduled: "bg-lime-50 md:bg-transparent",
-      shot: "bg-green-50 md:bg-transparent",
-      edited: "bg-emerald-50 md:bg-transparent",
-      posted: "bg-teal-50 md:bg-transparent",
+      scripted: "bg-red-50 md:bg-transparent",
+      approved: "bg-orange-50 md:bg-transparent",
+      scheduled: "bg-orange-50 md:bg-transparent",
+      shot: "bg-yellow-50 md:bg-transparent",
+      edited: "bg-lime-50 md:bg-transparent",
+      posted: "bg-green-50 md:bg-transparent",
     }
     return colors[stage] || "bg-gray-50 md:bg-transparent"
   }
@@ -650,7 +650,8 @@ export default function ContentPage() {
       <AppNav userEmail={user?.email} />
 
       <main className="container mx-auto p-6 space-y-6 flex-1">
-        <div className="flex items-center justify-between">
+        {/* Desktop: Title with description */}
+        <div className="hidden sm:flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold">Content</h1>
             <p className="text-muted-foreground">Plan, script, and manage your content pipeline</p>
@@ -658,7 +659,7 @@ export default function ContentPage() {
           <div className="flex gap-2">
             {canEditContent() && (
               <>
-                <CreateBatchDialog workspaceId={workspaceId} creators={creators as any} onBatchCreated={() => loadData()} />
+                <CreateBatchDialog workspaceId={workspaceId} creators={creators as any} onBatchCreated={() => loadData()} userRole={userRole} currentUserId={user?.id} />
                 <CreateContentDialog
                   workspaceId={workspaceId}
                   creators={creators as any}
@@ -671,22 +672,37 @@ export default function ContentPage() {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
-          {/* Search bar - left aligned, increased width */}
-          <div className="relative flex-1 min-w-[200px]">
+        {/* Mobile: Create buttons only */}
+        <div className="sm:hidden flex items-center gap-2">
+          {canEditContent() && (
+            <>
+              <CreateBatchDialog workspaceId={workspaceId} creators={creators as any} onBatchCreated={() => loadData()} userRole={userRole} currentUserId={user?.id} />
+              <CreateContentDialog
+                workspaceId={workspaceId}
+                creators={creators as any}
+                onContentCreated={() => loadContent(workspaceId)}
+                workspaceType={workspaceType}
+                userRole={userRole}
+              />
+            </>
+          )}
+        </div>
+
+        {/* Mobile: Search bar full width, filters below in 2x2 grid */}
+        <div className="sm:hidden space-y-3">
+          <div className="relative w-full">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
             <Input
               placeholder="Search by title, creator, pillar, platform, format..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 bg-white"
+              className="pl-9 bg-white w-full"
             />
           </div>
 
-          {/* Filter buttons - right aligned, reduced width, wraps when needed */}
-          <div className="flex flex-wrap gap-2 justify-end">
+          <div className="grid grid-cols-2 gap-2">
             <Select value={selectedBatch} onValueChange={setSelectedBatch}>
-              <SelectTrigger className="w-[130px] hover:bg-accent/20 transition-colors bg-white">
+              <SelectTrigger className="w-full hover:bg-accent/20 transition-colors bg-white">
                 <SelectValue placeholder="Batch" />
               </SelectTrigger>
               <SelectContent>
@@ -699,22 +715,25 @@ export default function ContentPage() {
               </SelectContent>
             </Select>
 
-            <Select value={selectedCreator} onValueChange={setSelectedCreator}>
-              <SelectTrigger className="w-[130px] hover:bg-accent/20 transition-colors bg-white">
-                <SelectValue placeholder="Creator" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Creators</SelectItem>
-                {creators.map((creator) => (
-                  <SelectItem key={creator.id} value={creator.id}>
-                    {creator.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {/* Hide creator filter for creator role */}
+            {userRole !== "creator" && (
+              <Select value={selectedCreator} onValueChange={setSelectedCreator}>
+                <SelectTrigger className="w-full hover:bg-accent/20 transition-colors bg-white">
+                  <SelectValue placeholder="Creator" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Creators</SelectItem>
+                  {creators.map((creator) => (
+                    <SelectItem key={creator.id} value={creator.id}>
+                      {creator.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
 
             <Select value={selectedStage} onValueChange={setSelectedStage}>
-              <SelectTrigger className="w-[130px] hover:bg-accent/20 transition-colors bg-white">
+              <SelectTrigger className="w-full hover:bg-accent/20 transition-colors bg-white">
                 <SelectValue placeholder="Stage" />
               </SelectTrigger>
               <SelectContent>
@@ -730,7 +749,7 @@ export default function ContentPage() {
             </Select>
 
             <Select value={selectedPlatform} onValueChange={setSelectedPlatform}>
-              <SelectTrigger className="w-[145px] hover:bg-accent/20 transition-colors bg-white">
+              <SelectTrigger className="w-full hover:bg-accent/20 transition-colors bg-white">
                 <SelectValue placeholder="Platform" />
               </SelectTrigger>
               <SelectContent>
@@ -743,6 +762,79 @@ export default function ContentPage() {
               </SelectContent>
             </Select>
           </div>
+        </div>
+
+        {/* Desktop: Search bar and filters on same row */}
+        <div className="hidden sm:flex items-center gap-2">
+          <div className="relative flex-1 min-w-[200px]">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+            <Input
+              placeholder="Search by title, creator, pillar, platform, format..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 bg-white"
+            />
+          </div>
+
+          <Select value={selectedBatch} onValueChange={setSelectedBatch}>
+            <SelectTrigger className="w-[130px] hover:bg-accent/20 transition-colors bg-white">
+              <SelectValue placeholder="Batch" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Batches</SelectItem>
+              {batches.map((batch) => (
+                <SelectItem key={batch.id} value={batch.id}>
+                  {batch.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {userRole !== "creator" && (
+            <Select value={selectedCreator} onValueChange={setSelectedCreator}>
+              <SelectTrigger className="w-[130px] hover:bg-accent/20 transition-colors bg-white">
+                <SelectValue placeholder="Creator" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Creators</SelectItem>
+                {creators.map((creator) => (
+                  <SelectItem key={creator.id} value={creator.id}>
+                    {creator.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+
+          <Select value={selectedStage} onValueChange={setSelectedStage}>
+            <SelectTrigger className="w-[130px] hover:bg-accent/20 transition-colors bg-white">
+              <SelectValue placeholder="Stage" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Stages</SelectItem>
+              <SelectItem value="idea">Idea</SelectItem>
+              <SelectItem value="scripted">Scripted</SelectItem>
+              <SelectItem value="approved">Approved</SelectItem>
+              <SelectItem value="shot">Shot</SelectItem>
+              <SelectItem value="edited">Edited</SelectItem>
+              <SelectItem value="scheduled">Scheduled</SelectItem>
+              <SelectItem value="posted">Posted</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select value={selectedPlatform} onValueChange={setSelectedPlatform}>
+            <SelectTrigger className="w-[145px] hover:bg-accent/20 transition-colors bg-white">
+              <SelectValue placeholder="Platform" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Platforms</SelectItem>
+              {workspacePlatforms.map((platform) => (
+                <SelectItem key={platform.id} value={platform.id}>
+                  {platform.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         {/* Table Section */}

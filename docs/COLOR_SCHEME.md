@@ -113,7 +113,7 @@ The application supports dark mode with the following adjustments:
 
 Colors are applied using Tailwind CSS utility classes that reference the CSS variables:
 
-```tsx
+\`\`\`tsx
 // Primary color
 <Button className="bg-primary text-primary-foreground">Primary</Button>
 
@@ -127,7 +127,7 @@ Colors are applied using Tailwind CSS utility classes that reference the CSS var
 <div className="bg-background text-foreground">
   <Card className="bg-card text-card-foreground">Card Content</Card>
 </div>
-```
+\`\`\`
 
 ### Theme Switching
 
@@ -152,6 +152,6 @@ To add a new theme preset:
 - **Global Styles**: `app/globals.css` - Contains all CSS custom property definitions
 - **Theme Toggle**: `app/profile/account/page.tsx` - User-facing theme selector
 - **Database Schema**: `scripts/028_add_theme_preset.sql` - Theme preference storage
-```
+\`\`\`
 
-```tsx file="" isHidden
+\`\`\`tsx file="" isHidden

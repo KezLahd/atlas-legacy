@@ -14,9 +14,11 @@ interface CreateBatchDialogProps {
   workspaceId: string
   creators: Creator[]
   onBatchCreated: () => void
+  userRole?: string
+  currentUserId?: string
 }
 
-export function CreateBatchDialog({ workspaceId, creators, onBatchCreated }: CreateBatchDialogProps) {
+export function CreateBatchDialog({ workspaceId, creators, onBatchCreated, userRole, currentUserId }: CreateBatchDialogProps) {
   const supabase = createClient()
   const [open, setOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
@@ -25,6 +27,10 @@ export function CreateBatchDialog({ workspaceId, creators, onBatchCreated }: Cre
   const [startDate, setStartDate] = useState("")
   const [endDate, setEndDate] = useState("")
   const [selectedCreators, setSelectedCreators] = useState<string[]>([])
+  
+  // If user is a creator, automatically assign to their creator profile
+  const isCreator = userRole === "creator"
+  const userCreator = isCreator ? creators.find(c => c.user_id === currentUserId) : null
 
   const toggleCreator = (creatorId: string) => {
     setSelectedCreators((prev) =>
@@ -55,7 +61,9 @@ export function CreateBatchDialog({ workspaceId, creators, onBatchCreated }: Cre
       if (batchError) throw batchError
 
       // Add creators to batch
-      for (const creatorId of selectedCreators) {
+      const creatorsToAdd = isCreator && userCreator ? [userCreator.id] : selectedCreators
+      
+      for (const creatorId of creatorsToAdd) {
         await supabase.from("batch_creators").insert({
           batch_id: newBatch.id,
           creator_id: creatorId,
@@ -82,9 +90,9 @@ export function CreateBatchDialog({ workspaceId, creators, onBatchCreated }: Cre
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="secondary">
+        <Button variant="secondary" className="min-w-0">
           <Plus className="size-4 mr-2" />
-          Create Batch
+          <span className="hidden sm:inline">Create </span>Batch
         </Button>
       </DialogTrigger>
       <DialogContent className="bg-white">
@@ -109,23 +117,38 @@ export function CreateBatchDialog({ workspaceId, creators, onBatchCreated }: Cre
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label>Creators</Label>
+          {!isCreator && (
             <div className="space-y-2">
-              {creators.map((creator) => (
-                <div key={creator.id} className="flex items-center space-x-2">
-                  <Checkbox
-                    id={creator.id}
-                    checked={selectedCreators.includes(creator.id)}
-                    onCheckedChange={() => toggleCreator(creator.id)}
-                  />
-                  <label htmlFor={creator.id} className="text-sm cursor-pointer">
-                    {creator.name}
-                  </label>
-                </div>
-              ))}
+              <Label>Creators</Label>
+              <div className="space-y-2">
+                {creators.map((creator) => (
+                  <div key={creator.id} className="flex items-center space-x-2">
+                    <Checkbox
+                      id={creator.id}
+                      checked={selectedCreators.includes(creator.id)}
+                      onCheckedChange={() => toggleCreator(creator.id)}
+                    />
+                    <label htmlFor={creator.id} className="text-sm cursor-pointer">
+                      {creator.name}
+                    </label>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
+          
+          {isCreator && userCreator && (
+            <div className="space-y-2">
+              <Label>Creator</Label>
+              <div className="text-sm text-muted-foreground p-2 bg-muted rounded-md">
+                This batch will be assigned to: <strong>
+                  {userCreator.workspace_members?.[0]?.user_profiles?.first_name && userCreator.workspace_members?.[0]?.user_profiles?.last_name
+                    ? `${userCreator.workspace_members[0].user_profiles.first_name} ${userCreator.workspace_members[0].user_profiles.last_name}`
+                    : userCreator.brand_name || userCreator.name}
+                </strong>
+              </div>
+            </div>
+          )}
 
           <Button onClick={handleSubmit} disabled={isLoading} className="w-full">
             {isLoading ? "Creating..." : "Create Batch"}

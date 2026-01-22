@@ -1,8 +1,12 @@
 "use client"
 
-import { useState, useEffect, useMemo, Suspense } from "react"
+import { useSearchParams } from "next/navigation"
+import { Suspense } from "react"
+import Loading from "./loading"
+
+import { useState, useEffect, useMemo } from "react"
 import { createClient } from "@/lib/supabase/client"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -187,8 +191,9 @@ function CreatorSetupContent() {
   const canProceed = () => {
     switch (step) {
       case 1:
+        // Primary niche is required for both creator and brand
         if (entityType === "creator") {
-          return creatorData.name.trim().length > 0 && creatorData.primaryNiche.trim().length > 0
+          return creatorData.primaryNiche.trim().length > 0
         } else {
           return creatorData.brandName.trim().length > 0 && creatorData.primaryNiche.trim().length > 0
         }
@@ -215,8 +220,8 @@ function CreatorSetupContent() {
       const result = await updateCreatorProfile({
         creatorId,
         creator: {
-          name: entityType === "creator" ? creatorData.name : "",
-          brand_name: entityType === "brand" ? creatorData.brandName : creatorData.brandName || "",
+          name: "",
+          brand_name: entityType === "brand" ? creatorData.brandName : "",
           primary_niche: creatorData.primaryNiche,
           sub_niches: creatorData.subNiches.map((sn) => sn.subNiche).filter(Boolean),
           platforms: selectedPlatforms,
@@ -241,12 +246,12 @@ function CreatorSetupContent() {
     <div className="min-h-screen bg-muted/30 flex items-center justify-center p-4">
       <div className="w-full max-w-2xl">
         <div className="mb-8 text-center space-y-2 relative">
-          <button
-            type="button"
-            onClick={() => router.push("/")}
-            className="absolute top-0 right-0 p-2 hover:bg-muted rounded-md transition-colors text-muted-foreground hover:text-foreground"
-            title="Return to home"
-          >
+                <button
+                  type="button"
+                  onClick={() => router.back()}
+                  className="absolute top-0 right-0 p-2 hover:bg-muted rounded-md transition-colors text-muted-foreground hover:text-foreground"
+                  title="Go back"
+                >
             <X className="size-5" />
           </button>
           <div className="flex items-center justify-center gap-2 mb-4">
@@ -260,7 +265,11 @@ function CreatorSetupContent() {
           <CardHeader>
             <CardTitle>
               {step === 1 && "Set up your creator profile"}
-              {step === 2 && "Select platforms"}
+              {step === 2 && (
+                <>
+                  Select platforms <span className="text-destructive">*</span>
+                </>
+              )}
               {step === 3 && "Set posting frequency"}
             </CardTitle>
             <CardDescription>
@@ -300,16 +309,7 @@ function CreatorSetupContent() {
                   </div>
                 </div>
 
-                {entityType === "creator" ? (
-                  <div className="space-y-2">
-                    <Label>Creator Name</Label>
-                    <Input
-                      placeholder="e.g. John Smith"
-                      value={creatorData.name}
-                      onChange={(e) => setCreatorData({ ...creatorData, name: e.target.value })}
-                    />
-                  </div>
-                ) : (
+                {entityType === "brand" && (
                   <div className="space-y-2">
                     <Label>Brand Name</Label>
                     <Input
@@ -321,7 +321,7 @@ function CreatorSetupContent() {
                 )}
 
                 <div className="space-y-2">
-                  <Label>Primary Niche</Label>
+                  <Label>Primary Niche <span className="text-destructive">*</span></Label>
                   <Input
                     placeholder="e.g. Fitness & Health"
                     value={creatorData.primaryNiche}
@@ -591,9 +591,8 @@ function CreatorSetupContent() {
 
 export default function CreatorSetupPage() {
   return (
-    <Suspense fallback={<div>Loading...</div>}>
+    <Suspense fallback={<Loading />}>
       <CreatorSetupContent />
     </Suspense>
   )
 }
-

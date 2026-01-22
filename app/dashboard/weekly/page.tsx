@@ -8,6 +8,7 @@ import { Footer } from "@/components/footer"
 import { Button } from "@/components/ui/button"
 import { ArrowLeft, ChevronLeft, ChevronRight, Calendar, Clock, Plus } from "lucide-react"
 import { CreateEventDialog } from "@/components/create-event-dialog"
+import { CalendarMemberFilter } from "@/components/calendar-member-filter"
 import type { CalendarEvent, Creator, Batch } from "@/lib/types/database"
 import { HoverCard, HoverCardTrigger } from "@/components/ui/hover-card"
 import { Card, CardContent } from "@/components/ui/card"
@@ -44,6 +45,9 @@ export default function WeeklyViewPage() {
   })
   const [editingEvent, setEditingEvent] = useState<EventWithDetails | null>(null)
   const [showEditEventDialog, setShowEditEventDialog] = useState<boolean>(false)
+  const [teamMembers, setTeamMembers] = useState<any[]>([])
+  const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null)
+  const canFilter = ["owner", "manager", "strategist"].includes(userRole)
 
   useEffect(() => {
     loadData()
@@ -53,7 +57,7 @@ export default function WeeklyViewPage() {
     if (workspaceId && userRole) {
       loadEvents()
     }
-  }, [workspaceId, weekStart, userRole, creators])
+  }, [workspaceId, weekStart, userRole, creators, selectedMemberId])
 
   const loadData = async () => {
     const {
@@ -95,6 +99,42 @@ export default function WeeklyViewPage() {
 
     if (creatorsRes.data) setCreators(creatorsRes.data)
     if (batchesRes.data) setBatches(batchesRes.data)
+    
+    // Load team members if user can filter
+    if (["owner", "manager", "strategist"].includes(membership.role)) {
+      const { data: membersData } = await supabase
+        .from("workspace_members")
+        .select(`
+          user_id,
+          user_profiles!inner(
+            id,
+            first_name,
+            last_name,
+            email,
+            avatar_storage_path,
+            avatar_type,
+            avatar_bg_color,
+            avatar_text_color
+          )
+        `)
+        .eq("workspace_id", membership.workspace_id)
+      
+      if (membersData) {
+        const members = membersData
+          .filter((m) => m.user_profiles)
+          .map((m) => ({
+            id: m.user_profiles.id,
+            first_name: m.user_profiles.first_name,
+            last_name: m.user_profiles.last_name,
+            email: m.user_profiles.email,
+            avatar_storage_path: m.user_profiles.avatar_storage_path,
+            avatar_type: m.user_profiles.avatar_type,
+            avatar_bg_color: m.user_profiles.avatar_bg_color,
+            avatar_text_color: m.user_profiles.avatar_text_color,
+          }))
+        setTeamMembers(members)
+      }
+    }
   }
 
   const loadEvents = async () => {
@@ -138,7 +178,18 @@ export default function WeeklyViewPage() {
           return isAssignedToCreator || isCreatedByCreator || isOnTeam
         })
       }
-      // Editors / viewers: currently see all (view-only). Owner/manager/strategist: see all.
+      // Owner/manager/strategist: can filter by member, otherwise see all
+      else if (selectedMemberId && ["owner", "manager", "strategist"].includes(userRole)) {
+        filteredEvents = data.filter((event: any) => {
+          const isAssignedToMember = event.assignee_id === selectedMemberId
+          const isCreatedByMember = event.created_by === selectedMemberId
+          const isOnTeam = event.event_team_members?.some(
+            (tm: { user_id: string }) => tm.user_id === selectedMemberId,
+          )
+          return isAssignedToMember || isCreatedByMember || isOnTeam
+        })
+      }
+      // Editors / viewers: see all (view-only)
 
       console.log("[v0] Weekly filtered events for", userRole, ":", filteredEvents.length)
 
@@ -213,9 +264,9 @@ export default function WeeklyViewPage() {
     filming: { bg: "bg-pink-100", text: "text-pink-800", border: "border-pink-300" },
     editing: { bg: "bg-blue-100", text: "text-blue-800", border: "border-blue-300" },
     review: { bg: "bg-orange-100", text: "text-orange-800", border: "border-orange-300" },
-    meeting: { bg: "bg-green-100", text: "text-green-800", border: "border-green-300" },
+    meeting: { bg: "bg-purple-100", text: "text-purple-800", border: "border-purple-300" },
     deadline: { bg: "bg-red-100", text: "text-red-800", border: "border-red-300" },
-    posting: { bg: "bg-yellow-100", text: "text-yellow-800", border: "border-yellow-300" },
+    posting: { bg: "bg-green-100", text: "text-green-800", border: "border-green-300" },
   }
 
   const getCategoryColor = (category: string) => {
@@ -251,38 +302,73 @@ export default function WeeklyViewPage() {
               Back to Month View
             </Button>
 
-            <CreateEventDialog
-              workspaceId={workspaceId}
-              creators={creators}
-              batches={batches}
-              onEventCreated={() => loadEvents()}
-              trigger={<Button className="bg-accent text-accent-foreground hover:bg-accent/90"><Plus className="size-4 mr-2" />Create</Button>}
-            />
-          </div>
-
-          {/* Mobile + Desktop: Week navigation with Create Event button on same row */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 sm:gap-4 flex-1">
-              <Button variant="outline" size="icon" onClick={previousWeek}>
-                <ChevronLeft className="size-4" />
-              </Button>
-              <h1 className="text-lg sm:text-3xl font-bold text-center flex-1">
-                {isCurrentWeek() ? "This Week" : `Week of ${weekStart.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}`}
-              </h1>
-              <Button variant="outline" size="icon" onClick={nextWeek}>
-                <ChevronRight className="size-4" />
-              </Button>
-            </div>
-
-            {/* Mobile: Create Event button on the right */}
-            <div className="sm:hidden ml-4">
+            <div className="flex items-center gap-2">
+              {canFilter && teamMembers.length > 0 && (
+                <CalendarMemberFilter
+                  members={teamMembers}
+                  selectedMemberId={selectedMemberId}
+                  onMemberChange={setSelectedMemberId}
+                />
+              )}
               <CreateEventDialog
                 workspaceId={workspaceId}
                 creators={creators}
                 batches={batches}
                 onEventCreated={() => loadEvents()}
-                trigger={<Button size="sm" className="bg-accent text-accent-foreground hover:bg-accent/90"><Plus className="size-4 mr-2" />Create</Button>}
+                trigger={<Button className="bg-accent text-accent-foreground hover:bg-accent/90"><Plus className="size-4 mr-2" />Create</Button>}
               />
+            </div>
+          </div>
+
+          {/* Mobile: Week navigation on top, filter + create below */}
+          <div className="sm:hidden flex flex-col gap-3">
+            <div className="flex items-center justify-between w-full">
+              <Button variant="outline" size="sm" onClick={previousWeek} className="px-2 bg-transparent">
+                <ChevronLeft className="size-4" />
+              </Button>
+              <h1 className="text-base font-bold text-center">
+                {isCurrentWeek() ? "This Week" : `Week of ${weekStart.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`}
+              </h1>
+              <Button variant="outline" size="sm" onClick={nextWeek} className="px-2 bg-transparent">
+                <ChevronRight className="size-4" />
+              </Button>
+            </div>
+
+            <div className="flex items-center gap-2 w-full">
+              {canFilter && teamMembers.length > 0 && (
+                <CalendarMemberFilter
+                  members={teamMembers}
+                  selectedMemberId={selectedMemberId}
+                  onMemberChange={setSelectedMemberId}
+                />
+              )}
+              <CreateEventDialog
+                workspaceId={workspaceId}
+                creators={creators}
+                batches={batches}
+                onEventCreated={() => loadEvents()}
+                trigger={
+                  <Button className="bg-accent text-accent-foreground hover:bg-accent/90 flex-1">
+                    <Plus className="size-4 mr-2" />
+                    New
+                  </Button>
+                }
+              />
+            </div>
+          </div>
+
+          {/* Desktop: Week navigation */}
+          <div className="hidden sm:flex items-center justify-between">
+            <div className="flex items-center gap-2 sm:gap-4 flex-1 justify-center">
+              <Button variant="outline" size="icon" onClick={previousWeek}>
+                <ChevronLeft className="size-4" />
+              </Button>
+              <h1 className="text-lg sm:text-3xl font-bold text-center">
+                {isCurrentWeek() ? "This Week" : `Week of ${weekStart.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}`}
+              </h1>
+              <Button variant="outline" size="icon" onClick={nextWeek}>
+                <ChevronRight className="size-4" />
+              </Button>
             </div>
           </div>
         </div>

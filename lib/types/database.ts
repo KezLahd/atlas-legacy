@@ -57,6 +57,7 @@ export interface HumanInsecurity {
 export interface Creator {
   id: string
   workspace_id: string
+  user_id: string | null
   name: string
   brand_name: string | null
   primary_niche: string
@@ -158,8 +159,19 @@ export interface CalendarEvent {
   description: string | null
   start_time: string
   end_time: string
+  category: string | null
   google_calendar_id: string | null
   created_by: string
+  created_at: string
+  updated_at: string
+}
+
+export interface EventCompletionTracking {
+  id: string
+  event_id: string
+  user_id: string
+  status: 'pending' | 'completed' | 'rescheduled'
+  completed_at: string | null
   created_at: string
   updated_at: string
 }

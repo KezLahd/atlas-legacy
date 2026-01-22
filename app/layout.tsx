@@ -4,6 +4,7 @@ import { Geist, Geist_Mono } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import { ThemeLoader } from "@/components/theme-loader"
 import { Toaster } from "@/components/ui/toaster"
+import { EventCompletionDialog } from "@/components/event-completion-dialog"
 import "./globals.css"
 
 const _geist = Geist({ subsets: ["latin"] })
@@ -30,6 +31,7 @@ export const metadata: Metadata = {
     ],
     apple: "/apple-icon.png",
   },
+    generator: 'v0.app'
 }
 
 export default function RootLayout({
@@ -60,6 +62,7 @@ export default function RootLayout({
       <body className={`font-sans antialiased`}>
         <ThemeLoader />
         {children}
+        <EventCompletionDialog />
         <Toaster />
         <Analytics />
       </body>

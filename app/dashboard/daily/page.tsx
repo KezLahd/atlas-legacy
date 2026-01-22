@@ -10,6 +10,7 @@ import { ArrowLeft, ChevronLeft, ChevronRight, Plus } from "lucide-react"
 import { EditEventDialog } from "@/components/edit-event-dialog"
 import { UserAvatar } from "@/components/user-avatar"
 import { CreateEventDialog } from "@/components/create-event-dialog"
+import { CalendarMemberFilter } from "@/components/calendar-member-filter"
 import type { CalendarEvent, Creator } from "@/lib/types/database"
 import { cn } from "@/lib/utils"
 
@@ -44,6 +45,9 @@ export default function DailyViewPage() {
   const [showEditEventDialog, setShowEditEventDialog] = useState(false)
   const [editingEvent, setEditingEvent] = useState<EventWithDetails | null>(null)
   const [showCreateEventDialog, setShowCreateEventDialog] = useState(false)
+  const [teamMembers, setTeamMembers] = useState<any[]>([])
+  const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null)
+  const canFilter = ["owner", "manager", "strategist"].includes(userRole)
   const now = new Date()
   const isToday =
     selectedDate.getDate() === now.getDate() &&
@@ -60,7 +64,7 @@ export default function DailyViewPage() {
     if (workspaceId && userRole) {
       loadEvents()
     }
-  }, [workspaceId, selectedDate, userRole, creators])
+  }, [workspaceId, selectedDate, userRole, creators, selectedMemberId])
 
   const loadData = async () => {
     const {
@@ -94,6 +98,42 @@ export default function DailyViewPage() {
       .order("name")
 
     if (creatorsData) setCreators(creatorsData)
+    
+    // Load team members if user can filter
+    if (["owner", "manager", "strategist"].includes(membership.role)) {
+      const { data: membersData } = await supabase
+        .from("workspace_members")
+        .select(`
+          user_id,
+          user_profiles!inner(
+            id,
+            first_name,
+            last_name,
+            email,
+            avatar_storage_path,
+            avatar_type,
+            avatar_bg_color,
+            avatar_text_color
+          )
+        `)
+        .eq("workspace_id", membership.workspace_id)
+      
+      if (membersData) {
+        const members = membersData
+          .filter((m) => m.user_profiles)
+          .map((m) => ({
+            id: m.user_profiles.id,
+            first_name: m.user_profiles.first_name,
+            last_name: m.user_profiles.last_name,
+            email: m.user_profiles.email,
+            avatar_storage_path: m.user_profiles.avatar_storage_path,
+            avatar_type: m.user_profiles.avatar_type,
+            avatar_bg_color: m.user_profiles.avatar_bg_color,
+            avatar_text_color: m.user_profiles.avatar_text_color,
+          }))
+        setTeamMembers(members)
+      }
+    }
   }
 
   const loadEvents = async () => {
@@ -139,7 +179,18 @@ export default function DailyViewPage() {
           return isAssignedToCreator || isCreatedByCreator || isOnTeam
         })
       }
-      // Editors / viewers: currently see all (view-only). Owner/manager/strategist: see all.
+      // Owner/manager/strategist: can filter by member, otherwise see all
+      else if (selectedMemberId && ["owner", "manager", "strategist"].includes(userRole)) {
+        filteredEvents = data.filter((event: any) => {
+          const isAssignedToMember = event.assignee_id === selectedMemberId
+          const isCreatedByMember = event.created_by === selectedMemberId
+          const isOnTeam = event.event_team_members?.some(
+            (tm: { user_id: string }) => tm.user_id === selectedMemberId,
+          )
+          return isAssignedToMember || isCreatedByMember || isOnTeam
+        })
+      }
+      // Editors / viewers: see all (view-only)
 
       console.log("[v0] Daily filtered events for", userRole, ":", filteredEvents.length)
 
@@ -360,21 +411,37 @@ export default function DailyViewPage() {
       <AppNav userEmail={user?.email} />
 
       <main className="container mx-auto p-6 space-y-6 flex-1">
-        <div className="flex items-center gap-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => router.push(`/dashboard/weekly?date=${selectedDate.toISOString()}`)}
-            className="text-muted-foreground hover:text-foreground"
-          >
-            <ArrowLeft className="size-5" />
-          </Button>
+        <div className="flex flex-col gap-3">
+          {/* Desktop: Back button separate */}
+          <div className="hidden sm:flex items-center gap-4">
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => router.push(`/dashboard/weekly?date=${selectedDate.toISOString()}`)}
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
+            >
+              <ArrowLeft className="size-4 mr-2" />
+              Back to Week View
+            </Button>
+          </div>
 
-          <div className="flex items-center gap-4 flex-1 justify-center">
-            <Button variant="outline" size="icon" onClick={previousDay}>
+          {/* Title and navigation row */}
+          <div className="flex items-center justify-between w-full gap-2">
+            {/* Mobile: Back button on left */}
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => router.push(`/dashboard/weekly?date=${selectedDate.toISOString()}`)}
+              className="sm:hidden bg-primary text-primary-foreground hover:bg-primary/90 px-2 flex-shrink-0"
+            >
+              <ArrowLeft className="size-4" />
+            </Button>
+
+            <Button variant="outline" size="sm" onClick={previousDay} className="px-2 bg-transparent flex-shrink-0">
               <ChevronLeft className="size-4" />
             </Button>
-            <h1 className="text-lg sm:text-3xl font-bold">
+            
+            <h1 className="text-base sm:text-lg md:text-3xl font-bold text-center flex-1">
               {isToday
                 ? "Today"
                 : selectedDate.toLocaleDateString("en-US", {
@@ -384,18 +451,30 @@ export default function DailyViewPage() {
                     day: "numeric",
                   })}
             </h1>
-            <Button variant="outline" size="icon" onClick={nextDay}>
+            
+            <Button variant="outline" size="sm" onClick={nextDay} className="px-2 bg-transparent flex-shrink-0">
               <ChevronRight className="size-4" />
             </Button>
           </div>
 
-          <Button
-            className="bg-accent text-accent-foreground hover:bg-accent/80 transition-colors"
-            onClick={() => setShowCreateEventDialog(true)}
-          >
-            <Plus className="size-4 mr-2" />
-            Create
-          </Button>
+          {/* Filter and create button row */}
+          <div className="flex items-center gap-2 w-full sm:w-auto sm:self-end">
+            {canFilter && teamMembers.length > 0 && (
+              <CalendarMemberFilter
+                members={teamMembers}
+                selectedMemberId={selectedMemberId}
+                onMemberChange={setSelectedMemberId}
+              />
+            )}
+            <Button
+              className="bg-accent text-accent-foreground hover:bg-accent/80 transition-colors flex-1 sm:flex-none"
+              onClick={() => setShowCreateEventDialog(true)}
+            >
+              <Plus className="size-4 mr-2" />
+              <span className="hidden sm:inline">Create</span>
+              <span className="sm:hidden">New</span>
+            </Button>
+          </div>
         </div>
 
         <div className="relative">

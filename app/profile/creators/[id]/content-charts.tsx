@@ -69,4 +69,3 @@ export function PlatformChart({ platformChartData }: { platformChartData: Array<
     </Card>
   )
 }
-

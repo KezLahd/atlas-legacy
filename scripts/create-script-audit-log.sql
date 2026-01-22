@@ -41,4 +41,3 @@ CREATE INDEX IF NOT EXISTS idx_script_audit_log_action ON script_audit_log(actio
 CREATE INDEX IF NOT EXISTS idx_script_audit_log_scene_number ON script_audit_log(scene_number);
 
 COMMIT;
-

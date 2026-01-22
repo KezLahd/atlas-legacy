@@ -1,9 +1,10 @@
 "use client"
 
 import type React from "react"
+import { Plus } from "lucide-react"
 
 import { useEffect, useState } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useRouter } from "next/navigation"
 import { Suspense } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { AppNav } from "@/components/app-nav"
@@ -21,8 +22,10 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Copy, Check } from "lucide-react"
 import { CreateEventDialog } from "@/components/create-event-dialog"
 import { EditEventDialog } from "@/components/edit-event-dialog"
+import { CalendarMemberFilter } from "@/components/calendar-member-filter"
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card"
 import type { CalendarEvent, Creator, Batch } from "@/lib/types/database"
+import Loading from "./loading"
 
 interface EventWithDetails extends CalendarEvent {
   content: { hook: string } | null
@@ -32,7 +35,6 @@ interface EventWithDetails extends CalendarEvent {
 
 function DashboardContent() {
   const router = useRouter()
-  const searchParams = useSearchParams()
   const supabase = createClient()
   const [user, setUser] = useState<any>(null)
   const [userRole, setUserRole] = useState<string>("")
@@ -50,6 +52,11 @@ function DashboardContent() {
   const [referralCodes, setReferralCodes] = useState<Array<{ role: string; referral_code: string }>>([])
   const [copiedCode, setCopiedCode] = useState<string | null>(null)
   const [referralCodeView, setReferralCodeView] = useState<"team" | "creator">("team")
+  const [teamMembers, setTeamMembers] = useState<any[]>([])
+  const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null)
+  const canFilter = ["owner", "manager", "strategist"].includes(userRole)
+
+  const searchParams = new URLSearchParams(window.location.search)
 
   useEffect(() => {
     loadData()
@@ -65,7 +72,7 @@ function DashboardContent() {
     if (workspaceId) {
       loadEvents()
     }
-  }, [workspaceId, currentDate])
+  }, [workspaceId, currentDate, selectedMemberId])
 
   useEffect(() => {
     // Check if we should show referral codes dialog
@@ -146,6 +153,43 @@ function DashboardContent() {
 
     if (creatorsRes.data) setCreators(creatorsRes.data)
     if (batchesRes.data) setBatches(batchesRes.data)
+    
+    // Load team members if user can filter
+    if (["owner", "manager", "strategist"].includes(membership.role)) {
+      const { data: membersData } = await supabase
+        .from("workspace_members")
+        .select(`
+          user_id,
+          user_profiles!inner(
+            id,
+            first_name,
+            last_name,
+            email,
+            avatar_storage_path,
+            avatar_type,
+            avatar_bg_color,
+            avatar_text_color
+          )
+        `)
+        .eq("workspace_id", membership.workspace_id)
+      
+      if (membersData) {
+        const members = membersData
+          .filter((m) => m.user_profiles)
+          .map((m) => ({
+            id: m.user_profiles.id,
+            first_name: m.user_profiles.first_name,
+            last_name: m.user_profiles.last_name,
+            email: m.user_profiles.email,
+            avatar_storage_path: m.user_profiles.avatar_storage_path,
+            avatar_type: m.user_profiles.avatar_type,
+            avatar_bg_color: m.user_profiles.avatar_bg_color,
+            avatar_text_color: m.user_profiles.avatar_text_color,
+          }))
+        setTeamMembers(members)
+      }
+    }
+    
     setLoading(false)
   }
 
@@ -195,6 +239,18 @@ function DashboardContent() {
             return isAssignedToCreator || isCreatedByCreator || isOnTeam
           })
         }
+        // Owner/manager/strategist: can filter by member, otherwise see all
+        else if (selectedMemberId && ["owner", "manager", "strategist"].includes(userRole)) {
+          filteredEvents = data.filter((event: any) => {
+            const isAssignedToMember = event.assignee_id === selectedMemberId
+            const isCreatedByMember = event.created_by === selectedMemberId
+            const isOnTeam = event.event_team_members?.some(
+              (tm: { user_id: string }) => tm.user_id === selectedMemberId,
+            )
+            return isAssignedToMember || isCreatedByMember || isOnTeam
+          })
+        }
+        // Editors / viewers: see all (view-only)
 
         console.log("[v0] Monthly filtered events for", userRole, ":", filteredEvents.length)
 
@@ -348,23 +404,34 @@ function DashboardContent() {
 
       <main className="container mx-auto p-6 space-y-8 flex-1">
         <div className="space-y-6">
-          <div className="flex items-center justify-between gap-4">
-            <Button variant="outline" size="icon" onClick={previousMonth}>
-              <ChevronLeft className="size-4" />
-            </Button>
-            <h2 className="text-2xl font-bold flex-1 text-center">
-              {currentDate.toLocaleString("default", { month: "long" })} {currentDate.getFullYear()}
-            </h2>
-            <Button variant="outline" size="icon" onClick={nextMonth}>
-              <ChevronRight className="size-4" />
-            </Button>
-            <CreateEventDialog
-              workspaceId={workspaceId}
-              creators={creators}
-              batches={batches}
-              onEventCreated={() => loadEvents()}
-              trigger={<Button className="bg-accent text-accent-foreground hover:bg-accent/90">Create Event</Button>}
-            />
+          <div className="flex flex-col sm:flex-row items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-4 flex-1 w-full sm:w-auto justify-center">
+              <Button variant="outline" size="icon" onClick={previousMonth}>
+                <ChevronLeft className="size-4" />
+              </Button>
+              <h2 className="text-lg sm:text-xl md:text-2xl font-bold text-center">
+                {currentDate.toLocaleString("default", { month: "long" })} {currentDate.getFullYear()}
+              </h2>
+              <Button variant="outline" size="icon" onClick={nextMonth}>
+                <ChevronRight className="size-4" />
+              </Button>
+            </div>
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              {canFilter && teamMembers.length > 0 && (
+                <CalendarMemberFilter
+                  members={teamMembers}
+                  selectedMemberId={selectedMemberId}
+                  onMemberChange={setSelectedMemberId}
+                />
+              )}
+              <CreateEventDialog
+                workspaceId={workspaceId}
+                creators={creators}
+                batches={batches}
+                onEventCreated={() => loadEvents()}
+                trigger={<Button className="bg-accent text-accent-foreground hover:bg-accent/90 flex-1 sm:flex-none"><Plus className="size-4 mr-2 sm:mr-0 md:mr-2" /><span className="hidden sm:inline">Create Event</span><span className="sm:hidden">New</span></Button>}
+              />
+            </div>
           </div>
 
           <div className="grid grid-cols-7 gap-2 pl-10">
@@ -705,7 +772,7 @@ function DashboardContent() {
 
 export default function DashboardPage() {
   return (
-    <Suspense fallback={<div>Loading...</div>}>
+    <Suspense fallback={<Loading />}>
       <DashboardContent />
     </Suspense>
   )

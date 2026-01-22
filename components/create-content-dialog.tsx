@@ -105,8 +105,7 @@ export function CreateContentDialog({
       hook.trim() !== "" &&
       selectedCreator !== "" &&
       (selectedCreator === "" || selectedPlatforms.length > 0) &&
-      format !== "" &&
-      selectedPillar !== ""
+      format !== ""
     )
   }
 
@@ -432,7 +431,7 @@ export function CreateContentDialog({
 
   const handleSubmit = async () => {
     if (!isFormValid()) {
-      alert("Please fill in all required fields: Hook/Title, Creator, Platform(s), Format, and Content Pillar")
+      alert("Please fill in all required fields: Hook/Title, Creator, Platform(s), and Format")
       return
     }
 
@@ -545,9 +544,9 @@ export function CreateContentDialog({
       )}
       {!externalOpen && !trigger && (
         <DialogTrigger asChild>
-          <Button>
+          <Button className="min-w-0">
             <Plus className="size-4 mr-2" />
-            Create Content
+            <span className="hidden sm:inline">Create </span>Content
           </Button>
         </DialogTrigger>
       )}
@@ -692,7 +691,7 @@ export function CreateContentDialog({
                       >
                         {config.icon ? (
                           <img
-                            src={config.icon}
+                            src={config.icon || "/placeholder.svg"}
                             alt={platform.name}
                             className="w-6 h-6 mb-1"
                           />
@@ -828,7 +827,7 @@ export function CreateContentDialog({
 
           <TabsContent value="strategy" className="space-y-4">
             <div className="space-y-2 mt-6">
-              <Label>@avayuergens Content Pillar *</Label>
+              <Label>Content Pillar</Label>
               <div className="grid grid-cols-2 gap-2">
                 {pillars.map((pillar) => (
                   <Button
@@ -914,13 +913,10 @@ export function CreateContentDialog({
                         {format.name}
                       </SelectItem>
                     ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  Choose the type of story: Big Goal, Change, Transformation, etc.
-                </p>
-              </div>
-            )}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
 
             {selectedPillar && !isDoubleDownPillarSelected() && !isSeriesPillarSelected() && (
               <div className="space-y-2">
@@ -957,13 +953,10 @@ export function CreateContentDialog({
                     disabled={isDoubleDownPillarSelected() && selectedTemplateContent !== ""}
                   >
                     {fourH.name}
-                  </Button>
-                ))}
-              </div>
-              {selectedFourH === "" && (
-                <p className="text-xs text-muted-foreground">Select a framework: Hook, How-to, Hack, or Help</p>
-              )}
-            </div>
+              </Button>
+            ))}
+          </div>
+        </div>
 
             {isSeriesPillarSelected() && (
               <>
