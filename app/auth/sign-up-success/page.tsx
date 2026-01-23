@@ -25,9 +25,16 @@ export default function SignUpSuccessPage() {
               <CardDescription>We sent you a confirmation link</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <p className="text-sm text-muted-foreground text-center">
-                Click the link in your email to confirm your account and start using Atlas.
-              </p>
+              <div className="space-y-3 text-sm text-muted-foreground text-center">
+                <p>
+                  Click the link in your email to confirm your account and start using Atlas.
+                </p>
+                <div className="pt-2 border-t">
+                  <p className="text-xs">
+                    <strong>Already have an account?</strong> If you've signed up before, this email was already registered. Please use the login page instead.
+                  </p>
+                </div>
+              </div>
               <Button asChild variant="outline" className="w-full bg-transparent">
                 <Link href="/auth/login">Back to Login</Link>
               </Button>

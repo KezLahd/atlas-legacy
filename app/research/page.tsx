@@ -1,5 +1,11 @@
 "use client"
 
+import { ChartTooltipContent } from "@/components/ui/chart"
+
+import { ChartTooltip } from "@/components/ui/chart"
+
+import { ChartContainer } from "@/components/ui/chart"
+
 import React, { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
@@ -803,7 +809,19 @@ export default function ResearchPage() {
                                     <div className="flex-1">
                                       <div className="h-full min-h-0">
                                         {trendData[item.id] && trendData[item.id].length > 1 ? (
-                                          <ResponsiveContainer width="100%" height="100%">
+                                          <ChartContainer
+                                            config={{
+                                              views: {
+                                                label: 'Views',
+                                                color: '#3a2415',
+                                              },
+                                              likes: {
+                                                label: 'Likes',
+                                                color: 'var(--theme-accent)',
+                                              },
+                                            }}
+                                            className="h-full w-full"
+                                          >
                                             <LineChart data={trendData[item.id]}>
                                               <CartesianGrid strokeDasharray="3 3" />
                                               <XAxis
@@ -811,8 +829,6 @@ export default function ResearchPage() {
                                                 type="number"
                                                 scale="time"
                                                 domain={['dataMin', 'dataMax']}
-                                                fontSize={12}
-                                                tick={{ fill: '#666' }}
                                                 tickFormatter={(timestamp) => {
                                                   const date = new Date(timestamp)
                                                   return date.toLocaleDateString('en-US', {
@@ -824,8 +840,6 @@ export default function ResearchPage() {
                                               <YAxis
                                                 yAxisId="left"
                                                 orientation="left"
-                                                fontSize={12}
-                                                tick={{ fill: '#666' }}
                                                 tickFormatter={(value) => {
                                                   if (value >= 1000000) {
                                                     return `${(value / 1000000).toFixed(1)}M`
@@ -834,13 +848,16 @@ export default function ResearchPage() {
                                                   }
                                                   return value.toString()
                                                 }}
-                                                label={{ value: 'Views', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: 'var(--color-primary)' } }}
+                                                label={{ 
+                                                  value: 'Views', 
+                                                  angle: -90, 
+                                                  position: 'insideLeft',
+                                                  style: { textAnchor: 'middle' }
+                                                }}
                                               />
                                               <YAxis
                                                 yAxisId="right"
                                                 orientation="right"
-                                                fontSize={12}
-                                                tick={{ fill: '#666' }}
                                                 tickFormatter={(value) => {
                                                   if (value >= 1000000) {
                                                     return `${(value / 1000000).toFixed(1)}M`
@@ -849,79 +866,43 @@ export default function ResearchPage() {
                                                   }
                                                   return value.toString()
                                                 }}
-                                                label={{ value: 'Likes', angle: 90, position: 'insideRight', style: { textAnchor: 'middle', fill: 'var(--color-accent)' } }}
+                                                label={{ 
+                                                  value: 'Likes', 
+                                                  angle: 90, 
+                                                  position: 'insideRight',
+                                                  style: { textAnchor: 'middle' }
+                                                }}
                                               />
-                                              <Tooltip
-                                                labelStyle={{ color: '#000' }}
-                                                contentStyle={{
-                                                  backgroundColor: '#fff',
-                                                  border: '1px solid #ccc',
-                                                  borderRadius: '4px'
-                                                }}
-                                                formatter={(value, name, props) => {
-                                                  // Skip tooltip for dashed lines
-                                                  if (name === 'viewsDashed' || name === 'likesDashed') {
-                                                    return null
-                                                  }
-                                                  
-                                                  let formattedValue = value
-                                                  if (typeof value === 'number') {
-                                                    if (value >= 1000000) {
-                                                      formattedValue = `${(value / 1000000).toFixed(1)}M`
-                                                    } else if (value >= 1000) {
-                                                      formattedValue = `${Math.round(value / 1000)}K`
-                                                    }
-                                                  }
-
-                                                  const label = name === 'views' ? 'Views' : 'Likes'
-
-                                                  return [
-                                                    formattedValue,
-                                                    label
-                                                  ]
-                                                }}
-                                                labelFormatter={(label, payload) => {
-                                                  if (payload && payload[0]?.payload) {
-                                                    const payloadData = payload[0].payload
-                                                    const isStartPoint = payloadData.isStartPoint
-                                                    
-                                                    // For baseline/start point, show the posting date
-                                                    if (isStartPoint) {
-                                                      const timestamp = payloadData.timestamp
-                                                      if (timestamp) {
-                                                        const date = new Date(timestamp)
-                                                        return date.toLocaleDateString('en-US', {
-                                                          month: 'short',
-                                                          day: 'numeric',
-                                                          year: 'numeric'
-                                                        })
+                                              <ChartTooltip
+                                                content={
+                                                  <ChartTooltipContent
+                                                    labelFormatter={(label, payload) => {
+                                                      if (payload && payload[0]?.payload) {
+                                                        const timestamp = payload[0].payload.timestamp
+                                                        if (timestamp) {
+                                                          const date = new Date(timestamp)
+                                                          return date.toLocaleString('en-US', {
+                                                            month: 'short',
+                                                            day: 'numeric',
+                                                            hour: '2-digit',
+                                                            minute: '2-digit',
+                                                            hour12: false
+                                                          })
+                                                        }
                                                       }
-                                                    }
-                                                    
-                                                    // Format the timestamp to readable date/time
-                                                    const timestamp = payloadData.timestamp
-                                                    if (timestamp) {
-                                                      const date = new Date(timestamp)
-                                                      return date.toLocaleString('en-US', {
-                                                        month: 'short',
-                                                        day: 'numeric',
-                                                        hour: '2-digit',
-                                                        minute: '2-digit',
-                                                        hour12: false
-                                                      })
-                                                    }
-                                                  }
-                                                  return label
-                                                }}
+                                                      return label
+                                                    }}
+                                                  />
+                                                }
                                               />
-                                              {/* Dashed baseline segment from 0,0 to first recorded value - render first so it's underneath */}
+                                              {/* Dashed baseline segment */}
                                               {trendData[item.id] && trendData[item.id].length > 1 && (
                                                 <>
                                                   <Line
                                                     yAxisId="left"
                                                     type="monotone"
                                                     dataKey="viewsDashed"
-                                                    stroke="var(--color-primary)"
+                                                    stroke="var(--color-views)"
                                                     strokeWidth={2}
                                                     strokeDasharray="5 5"
                                                     dot={false}
@@ -934,7 +915,7 @@ export default function ResearchPage() {
                                                     yAxisId="right"
                                                     type="monotone"
                                                     dataKey="likesDashed"
-                                                    stroke="var(--color-accent)"
+                                                    stroke="var(--color-likes)"
                                                     strokeWidth={2}
                                                     strokeDasharray="5 5"
                                                     dot={false}
@@ -945,29 +926,27 @@ export default function ResearchPage() {
                                                   />
                                                 </>
                                               )}
-                                              {/* Solid line for actual recorded data points */}
+                                              {/* Solid line for actual data */}
                                               <Line
                                                 yAxisId="left"
                                                 type="monotone"
                                                 dataKey="views"
-                                                stroke="var(--color-primary)"
+                                                stroke="var(--color-views)"
                                                 strokeWidth={2}
-                                                dot={{ fill: 'var(--color-primary)', strokeWidth: 2, r: 3 }}
-                                                activeDot={{ r: 5, fill: 'var(--color-primary)' }}
+                                                dot={false}
                                                 connectNulls={false}
                                               />
                                               <Line
                                                 yAxisId="right"
                                                 type="monotone"
                                                 dataKey="likes"
-                                                stroke="var(--color-accent)"
+                                                stroke="var(--color-likes)"
                                                 strokeWidth={2}
-                                                dot={{ fill: 'var(--color-accent)', strokeWidth: 2, r: 3 }}
-                                                activeDot={{ r: 5, fill: 'var(--color-accent)' }}
+                                                dot={false}
                                                 connectNulls={false}
                                               />
                                             </LineChart>
-                                          </ResponsiveContainer>
+                                          </ChartContainer>
                                         ) : (
                                           <div className="h-full flex items-center justify-center">
                                             <div className="text-center text-muted-foreground">

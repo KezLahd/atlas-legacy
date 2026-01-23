@@ -15,13 +15,18 @@ export function IncompleteProfileBanner() {
 
   useEffect(() => {
     async function checkProfile() {
+      console.log('[v0] IncompleteProfileBanner: Starting profile check')
       const supabase = createClient()
       
       const {
         data: { user },
       } = await supabase.auth.getUser()
       
-      if (!user) return
+      console.log('[v0] IncompleteProfileBanner: User:', user?.id)
+      if (!user) {
+        console.log('[v0] IncompleteProfileBanner: No user found')
+        return
+      }
 
       // Get user's workspace
       const { data: membership } = await supabase
@@ -30,7 +35,11 @@ export function IncompleteProfileBanner() {
         .eq("user_id", user.id)
         .single()
 
-      if (!membership) return
+      console.log('[v0] IncompleteProfileBanner: Membership:', membership)
+      if (!membership) {
+        console.log('[v0] IncompleteProfileBanner: No membership found')
+        return
+      }
 
       // Check for creators in the workspace with incomplete profiles
       const { data: creators } = await supabase
@@ -43,15 +52,36 @@ export function IncompleteProfileBanner() {
         .eq("workspace_id", membership.workspace_id)
         .eq("user_id", user.id)
 
-      if (creators && creators.length > 0) {
-        const incompleteCreator = creators.find(
-          (c) => !c.primary_niche || !c.creator_platforms || c.creator_platforms.length === 0
-        )
+      console.log('[v0] IncompleteProfileBanner: Creators data:', creators)
 
-        if (incompleteCreator) {
-          setCreatorId(incompleteCreator.id)
-          setShow(true)
+      // If no creator exists at all, show banner
+      if (!creators || creators.length === 0) {
+        console.log('[v0] IncompleteProfileBanner: No creator found - showing banner')
+        setShow(true)
+        return
+      }
+
+      // If creator exists, check if it's incomplete
+      const incompleteCreator = creators.find(
+        (c) => {
+          const hasNoPrimaryNiche = !c.primary_niche || c.primary_niche.trim() === ''
+          const hasNoPlatforms = !c.creator_platforms || c.creator_platforms.length === 0
+          console.log('[v0] IncompleteProfileBanner: Checking creator:', {
+            id: c.id,
+            primary_niche: c.primary_niche,
+            hasNoPrimaryNiche,
+            hasNoPlatforms,
+            platforms_count: c.creator_platforms?.length || 0
+          })
+          return hasNoPrimaryNiche || hasNoPlatforms
         }
+      )
+
+      console.log('[v0] IncompleteProfileBanner: Incomplete creator found:', incompleteCreator?.id)
+
+      if (incompleteCreator) {
+        setCreatorId(incompleteCreator.id)
+        setShow(true)
       }
     }
 
@@ -59,31 +89,44 @@ export function IncompleteProfileBanner() {
   }, [])
 
   const handleComplete = () => {
+    // If there's a creatorId, resume setup for that creator
+    // Otherwise, start fresh onboarding
     if (creatorId) {
       router.push(`/onboarding/creator-setup?creatorId=${creatorId}`)
+    } else {
+      router.push('/onboarding/creator-setup')
     }
   }
 
-  if (!show) return null
+  if (!show || dismissed) return null
 
   return (
-    <div className="bg-accent text-accent-foreground border-b border-accent-foreground/20">
+    <div className="sticky top-0 z-[60] bg-accent text-accent-foreground border-b border-accent/20 shadow-md">
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between py-3 gap-4">
           <div className="flex items-center gap-3 flex-1">
             <AlertCircle className="size-5 flex-shrink-0" />
             <p className="text-sm font-medium">
-              Complete your creator profile to unlock full access to Atlas
+              Your creator profile is incomplete! Complete setup to access batching, calendar, and analytics features.
             </p>
           </div>
-          <Button
-            onClick={handleComplete}
-            size="sm"
-            variant="secondary"
-            className="bg-background hover:bg-background/90 text-foreground"
-          >
-            Complete Setup
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              onClick={handleComplete}
+              size="sm"
+              className="bg-accent-foreground hover:bg-accent-foreground/90 text-accent font-semibold"
+            >
+              Continue Setup
+            </Button>
+            <Button
+              onClick={() => setDismissed(true)}
+              size="sm"
+              variant="ghost"
+              className="text-accent-foreground hover:bg-accent-foreground/20"
+            >
+              <X className="size-4" />
+            </Button>
+          </div>
         </div>
       </div>
     </div>

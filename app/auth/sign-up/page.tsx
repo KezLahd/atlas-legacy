@@ -129,7 +129,7 @@ export default function SignUpPage() {
     }
 
     try {
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
@@ -140,7 +140,38 @@ export default function SignUpPage() {
           },
         },
       })
-      if (error) throw error
+      
+      if (error) {
+        // Handle specific error cases
+        if (error.message?.toLowerCase().includes("user already registered") || 
+            error.message?.toLowerCase().includes("already registered")) {
+          setError("This email is already registered. Please log in instead.")
+          toast({
+            title: "Account Exists",
+            description: "This email is already registered. Redirecting to login...",
+            variant: "destructive",
+          })
+          setTimeout(() => {
+            router.push("/auth/login")
+          }, 2000)
+          return
+        }
+        throw error
+      }
+      
+      // If signup returns but user is null, email might already exist
+      if (!data.user) {
+        setError("This email may already be registered. Please check your email or try logging in.")
+        toast({
+          title: "Check Your Email",
+          description: "If this email is already registered, please log in instead.",
+        })
+        setTimeout(() => {
+          router.push("/auth/login")
+        }, 2000)
+        return
+      }
+      
       router.push("/auth/sign-up-success")
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : "An error occurred")
@@ -347,7 +378,7 @@ export default function SignUpPage() {
                       <Button
                         type="button"
                         variant="outline"
-                        className="w-full"
+                        className="w-full bg-transparent"
                         onClick={handleRequestAccess}
                         disabled={isLoading}
                       >

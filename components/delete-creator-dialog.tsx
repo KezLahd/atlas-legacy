@@ -1,22 +1,18 @@
 "use client"
 
+import { AlertDialogAction } from "@/components/ui/alert-dialog"
+
+import { AlertDialogCancel } from "@/components/ui/alert-dialog"
+
 import { useState } from "react"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
+import { useRouter } from "next/navigation"
+import { AlertDialog, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Trash2, AlertTriangle } from "lucide-react"
-import { useRouter } from "next/navigation"
+import { AlertTriangle, Trash2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { deleteCreator } from "@/app/actions/creator"
 import { createClient } from "@/lib/supabase/client"
 
 interface DeleteCreatorDialogProps {
@@ -57,88 +53,12 @@ export function DeleteCreatorDialog({
     setIsDeleting(true)
 
     try {
-      const supabase = createClient()
+      const result = await deleteCreator(creatorId, isOwner)
 
-      if (isOwner) {
-        // Owner deleting themselves as a creator
-        // Delete creator-specific data but keep user profile
-        
-        // Delete creator_platforms
-        await supabase.from("creator_platforms").delete().eq("creator_id", creatorId)
-        
-        // Delete creator_sub_niches
-        await supabase.from("creator_sub_niches").delete().eq("creator_id", creatorId)
-        
-        // Delete creator_access
-        await supabase.from("creator_access").delete().eq("creator_id", creatorId)
-        
-        // Delete creator_posting_frameworks
-        await supabase.from("creator_posting_frameworks").delete().eq("creator_id", creatorId)
-        
-        // Delete series
-        await supabase.from("series").delete().eq("creator_id", creatorId)
-        
-        // Delete batch_creators links
-        await supabase.from("batch_creators").delete().eq("creator_id", creatorId)
-        
-        // Delete content created FOR this creator (but audit logs remain for history)
-        const { data: creatorContent } = await supabase
-          .from("content")
-          .select("id")
-          .eq("creator_id", creatorId)
-        
-        const contentIds = creatorContent?.map((c: any) => c.id) || []
-        
-        if (contentIds.length > 0) {
-          // Delete content relationships (cascade will handle most)
-          await supabase.from("content").delete().eq("creator_id", creatorId)
-        }
-        
-        // Handle calendar events - only delete events created by this creator, otherwise just unassign
-        const { data: calendarEvents } = await supabase
-          .from("calendar_events")
-          .select("id, created_by, assignee_id")
-          .eq("assignee_id", userId)
-        
-        if (calendarEvents && calendarEvents.length > 0) {
-          for (const event of calendarEvents) {
-            if (event.created_by === userId) {
-              // Delete events created by this creator
-              await supabase.from("calendar_events").delete().eq("id", event.id)
-            } else {
-              // Just unassign events created by others
-              await supabase.from("calendar_events").update({ assignee_id: null }).eq("id", event.id)
-            }
-          }
-        }
-        
-        // Finally delete the creator record itself
-        const { error: deleteError } = await supabase
-          .from("creators")
-          .delete()
-          .eq("id", creatorId)
-
-        if (deleteError) throw deleteError
-
-        toast({
-          title: "Creator deleted",
-          description: `You have removed yourself as a creator. Your user account remains active.`,
-        })
-      } else {
-        // Manager/owner deleting another creator
-        // This will cascade delete due to ON DELETE CASCADE in schema
-        const { error: deleteError } = await supabase
-          .from("creators")
-          .delete()
-          .eq("id", creatorId)
-
-        if (deleteError) throw deleteError
-
-        toast({
-          title: "Creator deleted",
-          description: `${creatorName} has been permanently deleted from the workspace.`,
-        })
-      }
+      toast({
+        title: isOwner ? "Creator Profile Removed" : "Creator Deleted",
+        description: result.message,
+      })
 
       router.push("/profile/creators")
       router.refresh()
@@ -178,10 +98,19 @@ export function DeleteCreatorDialog({
             </AlertDialogTitle>
             <AlertDialogDescription className="space-y-4 text-left">
               <p className="font-semibold text-foreground">
-                This action cannot be undone. The following will be permanently deleted:
+                {isOwner 
+                  ? "This action cannot be undone. The following will be permanently deleted:" 
+                  : "This action cannot be undone. The user account and ALL associated data will be permanently deleted, including:"}
               </p>
               
               <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4 space-y-3">
+                {!isOwner && (
+                  <div className="flex items-start gap-2 text-foreground">
+                    <span className="text-destructive">•</span>
+                    <span><strong>User Account:</strong> The user will be completely removed from the system and can no longer log in</span>
+                  </div>
+                )}
+                
                 <div className="flex items-start gap-2 text-foreground">
                   <span className="text-destructive">•</span>
                   <span><strong>Creator Profile:</strong> All creator details, platforms, and sub-niches</span>
@@ -219,33 +148,15 @@ export function DeleteCreatorDialog({
                 
                 <div className="flex items-start gap-2 text-foreground">
                   <span className="text-destructive">•</span>
-                  <span><strong>Batch Assignments ({batchAssignmentCount}):</strong> All batch-creator relationships</span>
-                </div>
-                
-                <div className="flex items-start gap-2 text-foreground">
-                  <span className="text-destructive">•</span>
                   <span><strong>Access Permissions:</strong> All creator access assignments for team members</span>
                 </div>
                 
-                <div className="flex items-start gap-2 text-foreground">
-                  <span className="text-destructive">•</span>
-                  <span><strong>Posting Framework:</strong> Custom posting frequency and content type order</span>
-                </div>
-                
-                <div className="flex items-start gap-2 text-foreground">
-                  <span className="text-destructive">•</span>
-                  <span><strong>SFX & B-Roll:</strong> All sound effects and B-roll clips created by this creator</span>
-                </div>
-                
-                <div className="flex items-start gap-2 text-foreground">
-                  <span className="text-destructive">•</span>
-                  <span><strong>Batches Created:</strong> All batches created by this creator will be deleted, resulting in potentially unbatched content</span>
-                </div>
-                
-                <div className="flex items-start gap-2 text-foreground">
-                  <span className="text-destructive">•</span>
-                  <span><strong>Calendar Events:</strong> Events created by this creator will be deleted; events created by others will be unassigned</span>
-                </div>
+                {!isOwner && (
+                  <div className="flex items-start gap-2 text-foreground">
+                    <span className="text-destructive">•</span>
+                    <span><strong>Audit Logs:</strong> All activity logs and history created by this user</span>
+                  </div>
+                )}
               </div>
 
               <div className="bg-muted/50 p-3 rounded-md border border-border">

@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Progress } from "@/components/ui/progress"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Checkbox } from "@/components/ui/checkbox"
 import { GripVertical, Users, Building2, User, Plus, X, ArrowLeft, ArrowRight } from "lucide-react"
 import { AtlasLogo } from "@/components/atlas-logo"
 import type { WorkspaceType, Platform, UserRole } from "@/lib/types/database"
@@ -30,6 +31,7 @@ export default function OnboardingPage() {
   // Step 1: Workspace Type
   const [workspaceType, setWorkspaceType] = useState<WorkspaceType>("personal_creator")
   const [workspaceName, setWorkspaceName] = useState("")
+  const [ownerIsCreator, setOwnerIsCreator] = useState(false) // Toggle for team/manager owner being a creator
 
   // Step 2: Creator Setup
   const [creators, setCreators] = useState<CreatorData[]>([
@@ -241,9 +243,25 @@ export default function OnboardingPage() {
           },
         ]
       } else {
-        // For team/manager, no creators are created during onboarding
-        // Creators will be added via referral codes later
-        creatorsData = []
+        // For team/manager, check if owner is also a creator
+        if (ownerIsCreator) {
+          creatorsData = [
+            {
+              name: "",
+              brand_name: "",
+              primary_niche: creators[0]?.primaryNiche || "",
+              sub_niches: creators[0]?.subNiches.map((sn) => sn.subNiche).filter(Boolean) || [],
+              platforms: selectedPlatforms[0] || [],
+              entity_type: "creator" as const,
+              posting_frequency: postingFrequency,
+              excluded_day_types: [],
+              content_type_order: contentTypeOrderIds,
+              is_owner: true, // Mark this as the owner's creator profile
+            },
+          ]
+        } else {
+          creatorsData = []
+        }
       }
 
       const result = await createWorkspaceWithCreators({
@@ -284,11 +302,22 @@ export default function OnboardingPage() {
       if (step === 5) return 4
       return step
     } else {
-      // For team/manager, map steps: 0->0, 1->1, 4->2
-      if (step === 0) return 0
-      if (step === 1) return 1
-      if (step === 4) return 2
-      return step
+      // For team/manager
+      if (ownerIsCreator) {
+        // If owner is a creator, same as personal_creator
+        if (step === 0) return 0
+        if (step === 1) return 1
+        if (step === 2) return 2
+        if (step === 3) return 3
+        if (step === 5) return 4
+        return step
+      } else {
+        // If owner is not a creator, map steps: 0->0, 1->1, 4->2
+        if (step === 0) return 0
+        if (step === 1) return 1
+        if (step === 4) return 2
+        return step
+      }
     }
   }
 
@@ -303,14 +332,25 @@ export default function OnboardingPage() {
       }
       return 5
     } else {
-      // For team/manager, skip steps 2, 3, and 5
-      if (currentStep === 1) {
-        return 4 // Skip from step 1 to step 4 (skipping 2 and 3)
-      } else if (currentStep === 4) {
-        // Step 4 is the last step for team/manager (skip step 5)
-        return 4 // Stay at step 4, but handleSubmit will be called
+      // For team/manager
+      if (ownerIsCreator) {
+        // If owner is a creator, follow same flow as personal_creator
+        if (currentStep === 3) {
+          return 5 // Skip from step 3 to step 5 (skipping 4)
+        } else if (currentStep < 5) {
+          return (currentStep + 1) as OnboardingStep
+        }
+        return 5
+      } else {
+        // If owner is not a creator, skip steps 2, 3, and 5
+        if (currentStep === 1) {
+          return 4 // Skip from step 1 to step 4 (skipping 2 and 3)
+        } else if (currentStep === 4) {
+          // Step 4 is the last step for team/manager (skip step 5)
+          return 4 // Stay at step 4, but handleSubmit will be called
+        }
+        return currentStep
       }
-      return currentStep
     }
   }
 
@@ -325,19 +365,34 @@ export default function OnboardingPage() {
       }
       return 0
     } else {
-      // For team/manager, skip steps 2, 3, and 5
-      if (currentStep === 4) {
-        return 1 // Skip from step 4 back to step 1 (skipping 3 and 2)
-      } else if (currentStep > 0) {
-        return (currentStep - 1) as OnboardingStep
+      // For team/manager
+      if (ownerIsCreator) {
+        // If owner is a creator, follow same flow as personal_creator
+        if (currentStep === 5) {
+          return 3 // Skip from step 5 back to step 3 (skipping 4)
+        } else if (currentStep > 0) {
+          return (currentStep - 1) as OnboardingStep
+        }
+        return 0
+      } else {
+        // If owner is not a creator, skip steps 2, 3, and 5
+        if (currentStep === 4) {
+          return 1 // Skip from step 4 back to step 1 (skipping 2 and 3)
+        } else if (currentStep > 0) {
+          return (currentStep - 1) as OnboardingStep
+        }
+        return 0
       }
-      return 0
     }
   }
 
   // Helper function to get total number of content steps (excluding step 0)
   const getTotalSteps = () => {
-    return workspaceType === "personal_creator" ? 4 : 2 // Personal: 4 steps (1, 2, 3, 5), Team/Manager: 2 steps (1, 4)
+    if (workspaceType === "personal_creator") {
+      return 4 // Steps 1, 2, 3, 5
+    } else {
+      return ownerIsCreator ? 4 : 2 // If owner is creator: 4 steps, otherwise: 2 steps (1, 4)
+    }
   }
 
   const canProceed = () => {
@@ -347,11 +402,11 @@ export default function OnboardingPage() {
       case 1:
         return workspaceName.trim().length > 0
       case 2:
-        // Step 2 only exists for personal_creator
-        if (workspaceType === "personal_creator") {
+        // Step 2 exists for personal_creator or team/manager when owner is a creator
+        if (workspaceType === "personal_creator" || ownerIsCreator) {
           return creators[0]?.primaryNiche?.trim().length > 0
         }
-        return true // Should never reach here for team/manager
+        return true
       case 3:
         return true
       case 4:
@@ -593,14 +648,33 @@ export default function OnboardingPage() {
                     </button>
                   </div>
                 </div>
+
+                {/* Toggle for team/manager owners to be creators */}
+                {(workspaceType === "manager" || workspaceType === "team_agency") && (
+                  <div className="flex items-center space-x-2 p-4 bg-muted/50 rounded-lg">
+                    <Checkbox
+                      id="owner-is-creator"
+                      checked={ownerIsCreator}
+                      onCheckedChange={(checked) => setOwnerIsCreator(checked as boolean)}
+                    />
+                    <label
+                      htmlFor="owner-is-creator"
+                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                    >
+                      I am also a creator (set up my creator profile now)
+                    </label>
+                  </div>
+                )}
               </div>
             )}
 
-            {step === 2 && workspaceType === "personal_creator" && (
+            {step === 2 && (workspaceType === "personal_creator" || (workspaceType !== "personal_creator" && ownerIsCreator)) && (
               <div className="space-y-6">
                 <div className="p-4 bg-muted/50 rounded-lg">
                   <p className="text-sm text-muted-foreground">
-                    {"You'll be set up as the creator using your profile name: "}
+                    {workspaceType === "personal_creator" 
+                      ? "You'll be set up as the creator using your profile name: "
+                      : "Set up your creator profile using your account name: "}
                     <span className="font-bold text-foreground">
                       {`${userProfile?.first_name || ""} ${userProfile?.last_name || ""}`.trim() || "Your Name"}
                     </span>
@@ -650,7 +724,7 @@ export default function OnboardingPage() {
             )}
 
 
-            {step === 3 && workspaceType === "personal_creator" && (
+            {step === 3 && (workspaceType === "personal_creator" || (workspaceType !== "personal_creator" && ownerIsCreator)) && (
               <div className="space-y-6">
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
@@ -761,7 +835,7 @@ export default function OnboardingPage() {
               </div>
             )}
 
-            {step === 5 && workspaceType === "personal_creator" && (
+            {step === 5 && (workspaceType === "personal_creator" || (workspaceType !== "personal_creator" && ownerIsCreator)) && (
               <div className="space-y-6">
                 <div className="p-4 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg">
                   <h4 className="font-semibold text-blue-900 dark:text-blue-100 mb-2">
@@ -924,7 +998,6 @@ export default function OnboardingPage() {
     </div>
   )
 }
-
 type OnboardingStep = 0 | 1 | 2 | 3 | 4 | 5
 
 interface SubNiche {

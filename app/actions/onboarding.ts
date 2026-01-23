@@ -20,6 +20,7 @@ export async function createWorkspaceWithCreators(data: {
     posting_frequency: number
     excluded_day_types: number[]
     content_type_order: number[] // Added content type order
+    is_owner?: boolean // Flag to indicate this is the owner's creator profile
   }>
   invitations: Array<{
     first_name: string
@@ -137,12 +138,20 @@ export async function createWorkspaceWithCreators(data: {
     }
   } else {
     for (const creator of data.creators) {
+      // If this is the owner's creator profile, use their profile name
+      let creatorName = creator.name
+      if (creator.is_owner) {
+        creatorName = `${profile.first_name || ""} ${profile.last_name || ""}`.trim() || "Owner Creator"
+      } else if (creator.entity_type === "brand") {
+        creatorName = creator.brand_name || ""
+      }
+
       const { data: creatorData, error: creatorError } = await serviceSupabase
         .from("creators")
         .insert({
           workspace_id: workspace.id,
-          // For brands, store brand_name in name column, for creators use name
-          name: creator.entity_type === "brand" ? creator.brand_name || "" : creator.name,
+          // For brands, store brand_name in name column, for creators use name, for owner use their profile name
+          name: creatorName,
           brand_name: creator.entity_type === "brand" ? creator.brand_name || null : creator.brand_name || null,
           primary_niche: creator.primary_niche,
         })
@@ -325,13 +334,14 @@ export async function joinWorkspaceWithReferralCode(referralCode: string) {
       ? `${userProfile.first_name} ${userProfile.last_name}`
       : user.email?.split("@")[0] || "Creator"
 
-    // Create creator record
+    // Create creator record with user_id
     const { data: creatorData, error: creatorError } = await serviceSupabase
       .from("creators")
       .insert({
         workspace_id: referralCodeData.workspace_id,
+        user_id: user.id, // IMPORTANT: Link creator to user account
         name: creatorName,
-        primary_niche: "General", // Default niche, can be updated later
+        primary_niche: "", // Empty niche - user must complete setup
       })
       .select()
       .single()

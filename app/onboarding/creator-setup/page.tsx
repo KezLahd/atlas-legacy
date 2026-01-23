@@ -248,9 +248,9 @@ function CreatorSetupContent() {
         <div className="mb-8 text-center space-y-2 relative">
                 <button
                   type="button"
-                  onClick={() => router.back()}
+                  onClick={() => router.push("/dashboard")}
                   className="absolute top-0 right-0 p-2 hover:bg-muted rounded-md transition-colors text-muted-foreground hover:text-foreground"
-                  title="Go back"
+                  title="Go to dashboard"
                 >
             <X className="size-5" />
           </button>
@@ -323,7 +323,7 @@ function CreatorSetupContent() {
                 <div className="space-y-2">
                   <Label>Primary Niche <span className="text-destructive">*</span></Label>
                   <Input
-                    placeholder="e.g. Fitness & Health"
+                    placeholder="e.g. Lifestyle, Fitness, Tech, Beauty..."
                     value={creatorData.primaryNiche}
                     onChange={(e) => setCreatorData({ ...creatorData, primaryNiche: e.target.value })}
                   />
