@@ -321,7 +321,7 @@ export default function ContentPage() {
 
     setUserRole(membership.role)
 
-    await loadContent(membership.workspace_id)
+    await loadContent(membership.workspace_id, membership.role, authUser, creatorsRes.data || [])
     await loadCalendarEvents(membership.workspace_id)
   }
 
@@ -332,9 +332,13 @@ export default function ContentPage() {
     }
   }, [content, userRole])
 
-  const loadContent = async (workspaceId: string) => {
+  const loadContent = async (workspaceId: string, role?: string, currentUser?: any, creatorsData?: any[]) => {
     setIsLoading(true)
-    console.log("[v0] Loading content for workspace:", workspaceId, "user role:", userRole)
+    const currentRole = role || userRole
+    const activeUser = currentUser || user
+    const activeCreators = creatorsData || creators
+    console.log("[v0] Loading content for workspace:", workspaceId, "user role:", currentRole)
+    console.log("[v0] Creators available in loadContent:", activeCreators.length, "First creator:", activeCreators[0])
 
     // Build the query based on user role
     let query = supabase
@@ -365,13 +369,22 @@ export default function ContentPage() {
       .eq("workspace_id", workspaceId)
 
     // Apply role-based filtering
-    if (userRole === "creator") {
-      // Creators can only see their own content
-      const userCreator = creators.find(c => c.workspace_members?.[0]?.user_id === user?.id)
+    if (currentRole === "creator") {
+      // Creators can see content created FOR them (creator_id matches) 
+      // OR content created BY them (created_by matches their user_id)
+      const userCreator = activeCreators.find((c: any) => c.user_id === activeUser?.id)
+      console.log("[v0] Creator role - User creator found:", userCreator?.id, "User ID:", activeUser?.id)
+      
       if (userCreator) {
-        query = query.eq("creator_id", userCreator.id)
+        // Use OR filter to show both content FOR them and BY them
+        query = query.or(`creator_id.eq.${userCreator.id},created_by.eq.${activeUser?.id}`)
+        console.log("[v0] Applied creator filter: creator_id =", userCreator.id, "OR created_by =", activeUser?.id)
+      } else {
+        // Fallback: if no creator record, just show content they created
+        query = query.eq("created_by", activeUser?.id)
+        console.log("[v0] No creator record found, showing only created_by content")
       }
-    } else if (userRole === "editor" || userRole === "viewer") {
+    } else if (currentRole === "editor" || currentRole === "viewer") {
       // Editors and viewers can only see content they created or content assigned to them
       // For now, let's allow them to see all content but restrict editing (handled in UI)
       // This can be refined later based on specific requirements
@@ -453,7 +466,7 @@ export default function ContentPage() {
   const getCurrentCreatorId = () => {
     if (!user || !creators.length) return null
     const creatorRecord = (creators as any).find(
-      (c: any) => c.workspace_members?.[0]?.user_id === user.id,
+      (c: any) => c.user_id === user.id,
     )
     return creatorRecord?.id || null
   }
