@@ -241,6 +241,13 @@ export function CreateContentDialog({
     }
   }, [open, creators, selectedCreator, workspaceType, userRole])
 
+  // Autofill hook with brainstorm title when dialog opens with brainstorm context
+  useEffect(() => {
+    if (open && brainstormContext && !hook) {
+      setHook(brainstormContext.title)
+    }
+  }, [open, brainstormContext, hook])
+
 
   useEffect(() => {
     if (isDoubleDownPillarSelected() && selectedCreator) {
@@ -543,12 +550,12 @@ export function CreateContentDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      {!externalOpen && trigger && (
+      {!externalOpen && !brainstormContext && trigger && (
         <DialogTrigger asChild>
           {trigger}
         </DialogTrigger>
       )}
-      {!externalOpen && !trigger && (
+      {!externalOpen && !brainstormContext && !trigger && (
         <DialogTrigger asChild>
           <Button className="min-w-0">
             <Plus className="size-4 mr-2" />
@@ -556,575 +563,1108 @@ export function CreateContentDialog({
           </Button>
         </DialogTrigger>
       )}
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto bg-white">
-        <DialogHeader>
-          <DialogTitle>Create New Content</DialogTitle>
-        </DialogHeader>
-
-        {brainstormContext && (
-          <div className="bg-muted/30 border border-border rounded-lg p-4 space-y-2">
-            <div className="flex items-start gap-2">
-              <div className="p-1.5 rounded bg-primary/10">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="text-primary"
-                >
-                  <path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5" />
-                  <path d="M9 18h6" />
-                  <path d="M10 22h4" />
-                </svg>
-              </div>
-              <div className="flex-1">
-                <h4 className="font-medium text-sm">Brainstorm: {brainstormContext.title}</h4>
+      <DialogContent className="max-w-3xl min-w-0 w-[calc(100%-2rem)] sm:w-full max-h-[80vh] overflow-y-auto bg-white p-0">
+        {brainstormContext ? (
+          <>
+            {/* Header on accent background */}
+            <div className="bg-accent px-6 pt-6 pb-4 min-w-0">
+              <DialogHeader>
+                <DialogTitle className="text-accent-foreground">Ideate</DialogTitle>
+              </DialogHeader>
+              
+              {/* Brainstorm context */}
+              <div className="mt-3 min-w-0">
+                <h4 className="font-semibold text-base mb-2 break-all text-accent-foreground min-w-0">Brainstorm: {brainstormContext.title}</h4>
                 {brainstormContext.description && (
-                  <p className="text-sm text-muted-foreground mt-1">{brainstormContext.description}</p>
+                  <div className="bg-background/80 backdrop-blur-sm rounded-md p-3 max-h-[150px] overflow-y-auto border border-border/50 min-w-0">
+                    <p className="text-sm text-muted-foreground whitespace-pre-wrap break-all min-w-0 leading-relaxed">
+                      {brainstormContext.description}
+                    </p>
+                  </div>
                 )}
               </div>
             </div>
-          </div>
-        )}
+            
+            {/* Content form with standard padding */}
+            <div className="px-6 pt-3 pb-6 min-w-0">
+              <Tabs value={currentTab} onValueChange={setCurrentTab}>
+                <TabsList className="grid w-full grid-cols-3 bg-muted/30">
+                  <TabsTrigger
+                    value="context"
+                    className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+                  >
+                    Context
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="batch"
+                    className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+                  >
+                    Batch
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="strategy"
+                    className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+                  >
+                    Strategy
+                  </TabsTrigger>
+                </TabsList>
 
-        <Tabs value={currentTab} onValueChange={setCurrentTab}>
-          <TabsList className="grid w-full grid-cols-3 bg-muted/30">
-            <TabsTrigger
-              value="context"
-              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-            >
-              Context
-            </TabsTrigger>
-            <TabsTrigger
-              value="batch"
-              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-            >
-              Batch
-            </TabsTrigger>
-            <TabsTrigger
-              value="strategy"
-              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-            >
-              Strategy
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="context" className="space-y-4 mt-4">
-            <div className="space-y-2">
-              <Label>Hook / Title *</Label>
-              <Input
-                placeholder="e.g., 3 secrets to grow your audience"
-                value={hook}
-                onChange={(e) => setHook(e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">A catchy title or opening line for this content</p>
-            </div>
-
-            {/* Creator Selection - Only show for non-creator roles */}
-            {workspaceType !== "personal_creator" && userRole !== "creator" && (
-              <div className="space-y-2">
-                <Label>Creator *</Label>
-                <div className="grid grid-cols-3 gap-2">
-                  {creators.map((creator) => (
-                    <Button
-                      key={creator.id}
-                      type="button"
-                      variant={selectedCreator === creator.id ? "default" : "outline"}
-                      className={`w-full ${
-                        selectedCreator === creator.id
-                          ? "bg-primary text-primary-foreground hover:bg-primary/90"
-                          : "bg-white hover:bg-accent"
-                      }`}
-                      onClick={() => setSelectedCreator(creator.id)}
-                    >
-                      {creator.name || creator.brand_name}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {selectedCreator && (
-              <div className="space-y-2">
-                <Label>Platforms *</Label>
-                <div className="grid grid-cols-3 gap-2">
-                  {platforms.map((platform) => {
-                    const isSelected = selectedPlatforms.includes(platform.id)
-                    const platformName = platform.name.toLowerCase()
-
-                    // Platform configuration with colors and icons
-                    const platformConfig: Record<
-                      string,
-                      { icon: string; bg: string; border: string; text: string }
-                    > = {
-                      youtube: {
-                        icon: "/icons/youtube.svg",
-                        bg: "bg-red-50",
-                        border: "border-red-600",
-                        text: "text-red-700",
-                      },
-                      tiktok: {
-                        icon: "/icons/tiktok.svg",
-                        bg: "bg-gradient-to-br from-cyan-50 via-pink-50 to-black/5",
-                        border: "border-black",
-                        text: "text-black",
-                      },
-                      instagram: {
-                        icon: "/icons/instagram.svg",
-                        bg: "bg-gradient-to-br from-purple-50 via-pink-50 to-orange-50",
-                        border: "border-pink-500",
-                        text: "text-pink-700",
-                      },
-                      twitter: {
-                        icon: "/icons/x.svg",
-                        bg: "bg-black/5",
-                        border: "border-black",
-                        text: "text-black",
-                      },
-                      x: {
-                        icon: "/icons/x.svg",
-                        bg: "bg-black/5",
-                        border: "border-black",
-                        text: "text-black",
-                      },
-                      linkedin: {
-                        icon: "/icons/linkedin.svg",
-                        bg: "bg-blue-50",
-                        border: "border-blue-700",
-                        text: "text-blue-800",
-                      },
-                      facebook: {
-                        icon: "/icons/facebook.svg",
-                        bg: "bg-blue-50",
-                        border: "border-blue-600",
-                        text: "text-blue-700",
-                      },
-                    }
-
-                    const config = platformConfig[platformName] || {
-                      icon: "",
-                      bg: "bg-gray-50",
-                      border: "border-gray-400",
-                      text: "text-gray-700",
-                    }
-
-                    return (
-                      <div
-                        key={platform.id}
-                        className={`
-                          flex flex-col items-center justify-center p-3 rounded-lg cursor-pointer transition-all
-                          ${
-                            isSelected
-                              ? `${config.bg} border-2 ${config.border} shadow-sm`
-                              : "bg-background border border-border hover:bg-muted/50"
-                          }
-                        `}
-                        onClick={() => togglePlatform(platform.id)}
-                      >
-                        {config.icon ? (
-                          <img
-                            src={config.icon || "/placeholder.svg"}
-                            alt={platform.name}
-                            className="w-6 h-6 mb-1"
-                          />
-                        ) : (
-                          <span className="text-lg mb-1">🔗</span>
-                        )}
-                        <span className={`text-xs font-medium ${isSelected ? config.text : "text-foreground"}`}>
-                          {platform.name}
-                        </span>
-                      </div>
-                    )
-                  })}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Edit workspace in profile page to change platform preferences
-                </p>
-              </div>
-            )}
-
-            <div className="space-y-2">
-              <Label>Format *</Label>
-              <Select value={format} onValueChange={(v) => setFormat(v as ContentFormat)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="reel">Reel</SelectItem>
-                  <SelectItem value="post">Post</SelectItem>
-                  <SelectItem value="story">Story</SelectItem>
-                  <SelectItem value="carousel">Carousel</SelectItem>
-                  <SelectItem value="short">Short</SelectItem>
-                  <SelectItem value="long_video">Long Video</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="batch" className="space-y-4 mt-4">
-            {!showBatchForm ? (
-              <>
-                <div className="space-y-2">
-                  <Label>Batch (Optional)</Label>
-                  <Select value={selectedBatch} onValueChange={setSelectedBatch}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="No batch" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">No batch</SelectItem>
-                      {batches.map((batch) => (
-                        <SelectItem key={batch.id} value={batch.id}>
-                          {batch.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">
-                    Batches help organize multiple pieces of content created together
-                  </p>
-                </div>
-
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full bg-transparent"
-                  onClick={() => setShowBatchForm(true)}
-                >
-                  <Plus className="size-4 mr-2" />
-                  Create New Batch
-                </Button>
-              </>
-            ) : (
-              <div className="space-y-4 border rounded-lg p-4 bg-muted/20">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-medium">Create New Batch</h3>
-                  <Button type="button" variant="ghost" size="sm" onClick={() => setShowBatchForm(false)}>
-                    Cancel
-                  </Button>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Batch Name *</Label>
-                  <Input
-                    placeholder="January 2026 Content"
-                    value={newBatchName}
-                    onChange={(e) => setNewBatchName(e.target.value)}
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Start Date *</Label>
+                <TabsContent value="context" className="space-y-4 mt-4">
+                  <div className="space-y-2 min-w-0">
+                    <Label>Hook / Title *</Label>
                     <Input
-                      type="date"
-                      value={newBatchStartDate}
-                      onChange={(e) => setNewBatchStartDate(e.target.value)}
+                      placeholder="e.g., 3 secrets to grow your audience"
+                      value={hook}
+                      onChange={(e) => setHook(e.target.value)}
+                      className="min-w-0 break-all"
                     />
+                    <p className="text-xs text-muted-foreground">A catchy title or opening line for this content</p>
                   </div>
-                  <div className="space-y-2">
-                    <Label>End Date *</Label>
-                    <Input type="date" value={newBatchEndDate} onChange={(e) => setNewBatchEndDate(e.target.value)} />
-                  </div>
-                </div>
 
-                <div className="space-y-2">
-                  <Label>Creators</Label>
-                  <div className="space-y-2">
-                    {creators.map((creator) => (
-                      <div key={creator.id} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={`batch-creator-${creator.id}`}
-                          checked={newBatchCreators.includes(creator.id)}
-                          onCheckedChange={() => toggleBatchCreator(creator.id)}
-                        />
-                        <label htmlFor={`batch-creator-${creator.id}`} className="text-sm cursor-pointer">
-                          {creator.name}
-                        </label>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <Button
-                  type="button"
-                  onClick={handleCreateBatch}
-                  disabled={isLoading || !isBatchFormValid()}
-                  className="w-full"
-                >
-                  {isLoading ? "Creating..." : "Create Batch"}
-                </Button>
-              </div>
-            )}
-          </TabsContent>
-
-          <TabsContent value="strategy" className="space-y-4">
-            <div className="space-y-2 mt-6">
-              <Label>Content Pillar</Label>
-              <div className="grid grid-cols-2 gap-2">
-                {pillars.map((pillar) => (
-                  <Button
-                    key={pillar.id}
-                    type="button"
-                    variant={selectedPillar === pillar.id ? "default" : "outline"}
-                    className="w-full justify-start"
-                    onClick={() => setSelectedPillar(pillar.id)}
-                  >
-                    {pillar.name}
-                  </Button>
-                ))}
-              </div>
-            </div>
-
-            {isDoubleDownPillarSelected() && (
-              <div className="space-y-2">
-                <Label>Search Existing Content</Label>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Search by hook/title..."
-                    value={contentSearchQuery}
-                    onChange={(e) => setContentSearchQuery(e.target.value)}
-                    className="pl-9"
-                  />
-                </div>
-                {filteredContent.length > 0 && (
-                  <div className="max-h-48 overflow-y-auto border rounded-md">
-                    {filteredContent.map((content) => (
-                      <button
-                        key={content.id}
-                        type="button"
-                        className={`w-full text-left p-3 hover:bg-muted/50 border-b last:border-b-0 ${
-                          selectedTemplateContent === content.id ? "bg-primary/10" : ""
-                        }`}
-                        onClick={() => setSelectedTemplateContent(content.id)}
-                      >
-                        <p className="text-sm font-medium">{content.hook || "Untitled"}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {content.format} • {content.four_hs?.name || "No framework"}
-                        </p>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {selectedPillar && !isSeriesPillarSelected() && getAvailableStyles().length > 0 && (
-              <div className="space-y-2">
-                <Label>Content Style</Label>
-                <Select
-                  value={style}
-                  onValueChange={(v) => setStyle(v as ContentStyle)}
-                  disabled={isDoubleDownPillarSelected() && selectedTemplateContent !== ""}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {getAvailableStyles().map((styleOption) => (
-                      <SelectItem key={styleOption.value} value={styleOption.value}>
-                        {styleOption.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-
-            {isStorytellingPillarSelected() && (
-              <div className="space-y-2">
-                <Label>Storytelling Format</Label>
-                <Select value={storytellingFormat} onValueChange={setStorytellingFormat}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select format" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">None</SelectItem>
-                    {storytellingFormats.map((format) => (
-                      <SelectItem key={format.id} value={format.id}>
-                        {format.name}
-                      </SelectItem>
-                    ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
-
-            {selectedPillar && !isDoubleDownPillarSelected() && !isSeriesPillarSelected() && (
-              <div className="space-y-2">
-                <Label>@jun_yuh Framework Day (Optional)</Label>
-                <p className="text-xs text-muted-foreground">
-                  Link this content to a specific day in your posting schedule
-                </p>
-                <Select value={selectedContentType} onValueChange={setSelectedContentType}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select framework day..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">None</SelectItem>
-                    {contentTypes.map((ct) => (
-                      <SelectItem key={ct.id} value={ct.id.toString()}>
-                        Day {ct.id}: {ct.icon} {ct.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-
-            <div className="space-y-2">
-              <Label>4H Framework</Label>
-              <div className="grid grid-cols-4 gap-2">
-                {fourHs.map((fourH) => (
-                  <Button
-                    key={fourH.id}
-                    type="button"
-                    variant={selectedFourH === fourH.id ? "default" : "outline"}
-                    className="w-full"
-                    onClick={() => setSelectedFourH(selectedFourH === fourH.id ? "" : fourH.id)}
-                    disabled={isDoubleDownPillarSelected() && selectedTemplateContent !== ""}
-                  >
-                    {fourH.name}
-              </Button>
-            ))}
-          </div>
-        </div>
-
-            {isSeriesPillarSelected() && (
-              <>
-                {!showSeriesForm ? (
-                  <>
+                  {/* Creator Selection - Only show for non-creator roles */}
+                  {workspaceType !== "personal_creator" && userRole !== "creator" && (
                     <div className="space-y-2">
-                      <Label>Series (Optional)</Label>
-                      <div className="flex gap-2">
-                        <Select value={selectedSeries} onValueChange={setSelectedSeries}>
-                          <SelectTrigger className="flex-1">
-                            <SelectValue placeholder="No series" />
+                      <Label>Creator *</Label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {creators.map((creator) => (
+                          <Button
+                            key={creator.id}
+                            type="button"
+                            variant={selectedCreator === creator.id ? "default" : "outline"}
+                            className={`w-full ${
+                              selectedCreator === creator.id
+                                ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                                : "bg-white hover:bg-accent"
+                            }`}
+                            onClick={() => setSelectedCreator(creator.id)}
+                          >
+                            {creator.name || creator.brand_name}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {selectedCreator && (
+                    <div className="space-y-2">
+                      <Label>Platforms *</Label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {platforms.map((platform) => {
+                          const isSelected = selectedPlatforms.includes(platform.id)
+                          const platformName = platform.name.toLowerCase()
+
+                          // Platform configuration with colors and icons
+                          const platformConfig: Record<
+                            string,
+                            { icon: string; bg: string; border: string; text: string }
+                          > = {
+                            youtube: {
+                              icon: "/icons/youtube.svg",
+                              bg: "bg-red-50",
+                              border: "border-red-600",
+                              text: "text-red-700",
+                            },
+                            tiktok: {
+                              icon: "/icons/tiktok.svg",
+                              bg: "bg-gradient-to-br from-cyan-50 via-pink-50 to-black/5",
+                              border: "border-black",
+                              text: "text-black",
+                            },
+                            instagram: {
+                              icon: "/icons/instagram.svg",
+                              bg: "bg-gradient-to-br from-purple-50 via-pink-50 to-orange-50",
+                              border: "border-pink-500",
+                              text: "text-pink-700",
+                            },
+                            twitter: {
+                              icon: "/icons/x.svg",
+                              bg: "bg-black/5",
+                              border: "border-black",
+                              text: "text-black",
+                            },
+                            x: {
+                              icon: "/icons/x.svg",
+                              bg: "bg-black/5",
+                              border: "border-black",
+                              text: "text-black",
+                            },
+                            linkedin: {
+                              icon: "/icons/linkedin.svg",
+                              bg: "bg-blue-50",
+                              border: "border-blue-700",
+                              text: "text-blue-800",
+                            },
+                            facebook: {
+                              icon: "/icons/facebook.svg",
+                              bg: "bg-blue-50",
+                              border: "border-blue-600",
+                              text: "text-blue-700",
+                            },
+                          }
+
+                          const config = platformConfig[platformName] || {
+                            icon: "",
+                            bg: "bg-gray-50",
+                            border: "border-gray-400",
+                            text: "text-gray-700",
+                          }
+
+                          return (
+                            <div
+                              key={platform.id}
+                              className={`
+                                flex flex-col items-center justify-center p-3 rounded-lg cursor-pointer transition-all
+                                ${
+                                  isSelected
+                                    ? `${config.bg} border-2 ${config.border} shadow-sm`
+                                    : "bg-background border border-border hover:bg-muted/50"
+                                }
+                              `}
+                              onClick={() => togglePlatform(platform.id)}
+                            >
+                              {config.icon ? (
+                                <img
+                                  src={config.icon || "/placeholder.svg"}
+                                  alt={platform.name}
+                                  className="w-6 h-6 mb-1"
+                                />
+                              ) : (
+                                <span className="text-lg mb-1">🔗</span>
+                              )}
+                              <span className={`text-xs font-medium ${isSelected ? config.text : "text-foreground"}`}>
+                                {platform.name}
+                              </span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Edit workspace in profile page to change platform preferences
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="space-y-2">
+                    <Label>Format *</Label>
+                    <Select value={format} onValueChange={(v) => setFormat(v as ContentFormat)}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="reel">Reel</SelectItem>
+                        <SelectItem value="post">Post</SelectItem>
+                        <SelectItem value="story">Story</SelectItem>
+                        <SelectItem value="carousel">Carousel</SelectItem>
+                        <SelectItem value="short">Short</SelectItem>
+                        <SelectItem value="long_video">Long Video</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="batch" className="space-y-4 mt-4">
+                  {!showBatchForm ? (
+                    <>
+                      <div className="space-y-2">
+                        <Label>Batch (Optional)</Label>
+                        <Select value={selectedBatch} onValueChange={setSelectedBatch}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="No batch" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="none">No series</SelectItem>
-                            {series.map((s) => (
-                              <SelectItem key={s.id} value={s.id}>
-                                {s.name}
+                            <SelectItem value="none">No batch</SelectItem>
+                            {batches.map((batch) => (
+                              <SelectItem key={batch.id} value={batch.id}>
+                                {batch.name}
                               </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="icon"
-                          onClick={() => setShowSeriesForm(true)}
-                          disabled={!selectedCreator}
-                        >
-                          <Plus className="size-4" />
+                        <p className="text-xs text-muted-foreground">
+                          Batches help organize multiple pieces of content created together
+                        </p>
+                      </div>
+
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full bg-transparent"
+                        onClick={() => setShowBatchForm(true)}
+                      >
+                        <Plus className="size-4 mr-2" />
+                        Create New Batch
+                      </Button>
+                    </>
+                  ) : (
+                    <div className="space-y-4 border rounded-lg p-4 bg-muted/20">
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-medium">Create New Batch</h3>
+                        <Button type="button" variant="ghost" size="sm" onClick={() => setShowBatchForm(false)}>
+                          Cancel
                         </Button>
                       </div>
-                      {!selectedCreator && (
-                        <p className="text-xs text-muted-foreground">Select a creator first to create a series</p>
+
+                      <div className="space-y-2">
+                        <Label>Batch Name *</Label>
+                        <Input
+                          placeholder="January 2026 Content"
+                          value={newBatchName}
+                          onChange={(e) => setNewBatchName(e.target.value)}
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Start Date *</Label>
+                          <Input
+                            type="date"
+                            value={newBatchStartDate}
+                            onChange={(e) => setNewBatchStartDate(e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>End Date *</Label>
+                          <Input type="date" value={newBatchEndDate} onChange={(e) => setNewBatchEndDate(e.target.value)} />
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Creators</Label>
+                        <div className="space-y-2">
+                          {creators.map((creator) => (
+                            <div key={creator.id} className="flex items-center space-x-2">
+                              <Checkbox
+                                id={`batch-creator-${creator.id}`}
+                                checked={newBatchCreators.includes(creator.id)}
+                                onCheckedChange={() => toggleBatchCreator(creator.id)}
+                              />
+                              <label htmlFor={`batch-creator-${creator.id}`} className="text-sm cursor-pointer">
+                                {creator.name}
+                              </label>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <Button
+                        type="button"
+                        onClick={handleCreateBatch}
+                        disabled={isLoading || !isBatchFormValid()}
+                        className="w-full"
+                      >
+                        {isLoading ? "Creating..." : "Create Batch"}
+                      </Button>
+                    </div>
+                  )}
+                </TabsContent>
+
+                <TabsContent value="strategy" className="space-y-4">
+                  <div className="space-y-2 mt-6">
+                    <Label>Content Pillar</Label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {pillars.map((pillar) => (
+                        <Button
+                          key={pillar.id}
+                          type="button"
+                          variant={selectedPillar === pillar.id ? "default" : "outline"}
+                          className="w-full justify-start"
+                          onClick={() => setSelectedPillar(pillar.id)}
+                        >
+                          {pillar.name}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {isDoubleDownPillarSelected() && (
+                    <div className="space-y-2">
+                      <Label>Search Existing Content</Label>
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                        <Input
+                          placeholder="Search by hook/title..."
+                          value={contentSearchQuery}
+                          onChange={(e) => setContentSearchQuery(e.target.value)}
+                          className="pl-9"
+                        />
+                      </div>
+                      {filteredContent.length > 0 && (
+                        <div className="max-h-48 overflow-y-auto border rounded-md">
+                          {filteredContent.map((content) => (
+                            <button
+                              key={content.id}
+                              type="button"
+                              className={`w-full text-left p-3 hover:bg-muted/50 border-b last:border-b-0 ${
+                                selectedTemplateContent === content.id ? "bg-primary/10" : ""
+                              }`}
+                              onClick={() => setSelectedTemplateContent(content.id)}
+                            >
+                              <p className="text-sm font-medium">{content.hook || "Untitled"}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {content.format} • {content.four_hs?.name || "No framework"}
+                              </p>
+                            </button>
+                          ))}
+                        </div>
                       )}
                     </div>
+                  )}
+
+                  {selectedPillar && !isSeriesPillarSelected() && getAvailableStyles().length > 0 && (
+                    <div className="space-y-2">
+                      <Label>Content Style</Label>
+                      <Select
+                        value={style}
+                        onValueChange={(v) => setStyle(v as ContentStyle)}
+                        disabled={isDoubleDownPillarSelected() && selectedTemplateContent !== ""}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {getAvailableStyles().map((styleOption) => (
+                            <SelectItem key={styleOption.value} value={styleOption.value}>
+                              {styleOption.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  {isStorytellingPillarSelected() && (
+                    <div className="space-y-2">
+                      <Label>Storytelling Format</Label>
+                      <Select value={storytellingFormat} onValueChange={setStorytellingFormat}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select format" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">None</SelectItem>
+                          {storytellingFormats.map((format) => (
+                            <SelectItem key={format.id} value={format.id}>
+                              {format.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  {selectedPillar && !isDoubleDownPillarSelected() && !isSeriesPillarSelected() && (
+                    <div className="space-y-2">
+                      <Label>@jun_yuh Framework Day (Optional)</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Link this content to a specific day in your posting schedule
+                      </p>
+                      <Select value={selectedContentType} onValueChange={setSelectedContentType}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select framework day..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">None</SelectItem>
+                          {contentTypes.map((ct) => (
+                            <SelectItem key={ct.id} value={ct.id.toString()}>
+                              Day {ct.id}: {ct.icon} {ct.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  <div className="space-y-2">
+                    <Label>4H Framework</Label>
+                    <div className="grid grid-cols-4 gap-2">
+                      {fourHs.map((fourH) => (
+                        <Button
+                          key={fourH.id}
+                          type="button"
+                          variant={selectedFourH === fourH.id ? "default" : "outline"}
+                          className="w-full"
+                          onClick={() => setSelectedFourH(selectedFourH === fourH.id ? "" : fourH.id)}
+                          disabled={isDoubleDownPillarSelected() && selectedTemplateContent !== ""}
+                        >
+                          {fourH.name}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {isSeriesPillarSelected() && (
+                    <>
+                      {!showSeriesForm ? (
+                        <>
+                          <div className="space-y-2">
+                            <Label>Series (Optional)</Label>
+                            <div className="flex gap-2">
+                              <Select value={selectedSeries} onValueChange={setSelectedSeries}>
+                                <SelectTrigger className="flex-1">
+                                  <SelectValue placeholder="No series" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="none">No series</SelectItem>
+                                  {series.map((s) => (
+                                    <SelectItem key={s.id} value={s.id}>
+                                      {s.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="icon"
+                                onClick={() => setShowSeriesForm(true)}
+                                disabled={!selectedCreator}
+                              >
+                                <Plus className="size-4" />
+                              </Button>
+                            </div>
+                            {!selectedCreator && (
+                              <p className="text-xs text-muted-foreground">Select a creator first to create a series</p>
+                            )}
+                          </div>
+                        </>
+                      ) : (
+                        <div className="space-y-4 border rounded-lg p-4 bg-muted/20">
+                          <div className="flex items-center justify-between">
+                            <h3 className="font-medium">Create New Series</h3>
+                            <Button type="button" variant="ghost" size="sm" onClick={() => setShowSeriesForm(false)}>
+                              Cancel
+                            </Button>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label>Series Name *</Label>
+                            <Input
+                              placeholder="My Series Name"
+                              value={newSeriesName}
+                              onChange={(e) => setNewSeriesName(e.target.value)}
+                            />
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label>Series Type</Label>
+                            <Select value={newSeriesType} onValueChange={setNewSeriesType}>
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="progress">Progress</SelectItem>
+                                <SelectItem value="daily_update">Daily Update</SelectItem>
+                                <SelectItem value="goal_based">Goal Based</SelectItem>
+                                <SelectItem value="custom">Custom</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <Button type="button" onClick={handleCreateSeries} disabled={isLoading} className="w-full">
+                            {isLoading ? "Creating..." : "Create Series"}
+                          </Button>
+                        </div>
+                      )}
+
+                      {selectedSeries !== "none" && (
+                        <div className="space-y-2">
+                          <Label>Episode Number</Label>
+                          <Input
+                            type="number"
+                            placeholder="1"
+                            value={episodeNumber}
+                            onChange={(e) => setEpisodeNumber(e.target.value)}
+                          />
+                        </div>
+                      )}
+                    </>
+                  )}
+                </TabsContent>
+              </Tabs>
+
+              <div className="flex justify-between pt-4">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    const tabs = ["context", "batch", "strategy"]
+                    const currentIndex = tabs.indexOf(currentTab)
+                    if (currentIndex > 0) {
+                      setCurrentTab(tabs[currentIndex - 1])
+                    }
+                  }}
+                  disabled={currentTab === "context"}
+                >
+                  <ArrowLeft className="size-4 mr-2" />
+                  Back
+                </Button>
+
+                {currentTab === "strategy" ? (
+                  <Button
+                    onClick={handleSubmit}
+                    disabled={isLoading || !isFormValid()}
+                    className="bg-accent hover:bg-accent/90 text-accent-foreground"
+                  >
+                    {isLoading ? "Creating..." : "Create Content"}
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={() => {
+                      const tabs = ["context", "batch", "strategy"]
+                      const currentIndex = tabs.indexOf(currentTab)
+                      if (currentIndex < tabs.length - 1) {
+                        setCurrentTab(tabs[currentIndex + 1])
+                      }
+                    }}
+                    className="bg-accent hover:bg-accent/90 text-accent-foreground"
+                  >
+                    Next
+                    <ArrowRight className="size-4 ml-2" />
+                  </Button>
+                )}
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            <DialogHeader className="px-6 pt-6">
+              <DialogTitle>Create New Content</DialogTitle>
+            </DialogHeader>
+            <div className="px-6 pt-4 pb-6">
+            <Tabs value={currentTab} onValueChange={setCurrentTab}>
+              <TabsList className="grid w-full grid-cols-3 bg-muted/30">
+                <TabsTrigger
+                  value="context"
+                  className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+                >
+                  Context
+                </TabsTrigger>
+                <TabsTrigger
+                  value="batch"
+                  className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+                >
+                  Batch
+                </TabsTrigger>
+                <TabsTrigger
+                  value="strategy"
+                  className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+                >
+                  Strategy
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="context" className="space-y-4 mt-4">
+                <div className="space-y-2">
+                  <Label>Hook / Title *</Label>
+                  <Input
+                    placeholder="e.g., 3 secrets to grow your audience"
+                    value={hook}
+                    onChange={(e) => setHook(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">A catchy title or opening line for this content</p>
+                </div>
+
+                {/* Creator Selection - Only show for non-creator roles */}
+                {workspaceType !== "personal_creator" && userRole !== "creator" && (
+                  <div className="space-y-2">
+                    <Label>Creator *</Label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {creators.map((creator) => (
+                        <Button
+                          key={creator.id}
+                          type="button"
+                          variant={selectedCreator === creator.id ? "default" : "outline"}
+                          className={`w-full ${
+                            selectedCreator === creator.id
+                              ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                              : "bg-white hover:bg-accent"
+                          }`}
+                          onClick={() => setSelectedCreator(creator.id)}
+                        >
+                          {creator.name || creator.brand_name}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {selectedCreator && (
+                  <div className="space-y-2">
+                    <Label>Platforms *</Label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {platforms.map((platform) => {
+                        const isSelected = selectedPlatforms.includes(platform.id)
+                        const platformName = platform.name.toLowerCase()
+
+                        // Platform configuration with colors and icons
+                        const platformConfig: Record<
+                          string,
+                          { icon: string; bg: string; border: string; text: string }
+                        > = {
+                          youtube: {
+                            icon: "/icons/youtube.svg",
+                            bg: "bg-red-50",
+                            border: "border-red-600",
+                            text: "text-red-700",
+                          },
+                          tiktok: {
+                            icon: "/icons/tiktok.svg",
+                            bg: "bg-gradient-to-br from-cyan-50 via-pink-50 to-black/5",
+                            border: "border-black",
+                            text: "text-black",
+                          },
+                          instagram: {
+                            icon: "/icons/instagram.svg",
+                            bg: "bg-gradient-to-br from-purple-50 via-pink-50 to-orange-50",
+                            border: "border-pink-500",
+                            text: "text-pink-700",
+                          },
+                          twitter: {
+                            icon: "/icons/x.svg",
+                            bg: "bg-black/5",
+                            border: "border-black",
+                            text: "text-black",
+                          },
+                          x: {
+                            icon: "/icons/x.svg",
+                            bg: "bg-black/5",
+                            border: "border-black",
+                            text: "text-black",
+                          },
+                          linkedin: {
+                            icon: "/icons/linkedin.svg",
+                            bg: "bg-blue-50",
+                            border: "border-blue-700",
+                            text: "text-blue-800",
+                          },
+                          facebook: {
+                            icon: "/icons/facebook.svg",
+                            bg: "bg-blue-50",
+                            border: "border-blue-600",
+                            text: "text-blue-700",
+                          },
+                        }
+
+                        const config = platformConfig[platformName] || {
+                          icon: "",
+                          bg: "bg-gray-50",
+                          border: "border-gray-400",
+                          text: "text-gray-700",
+                        }
+
+                        return (
+                          <div
+                            key={platform.id}
+                            className={`
+                              flex flex-col items-center justify-center p-3 rounded-lg cursor-pointer transition-all
+                              ${
+                                isSelected
+                                  ? `${config.bg} border-2 ${config.border} shadow-sm`
+                                  : "bg-background border border-border hover:bg-muted/50"
+                              }
+                            `}
+                            onClick={() => togglePlatform(platform.id)}
+                          >
+                            {config.icon ? (
+                              <img
+                                src={config.icon || "/placeholder.svg"}
+                                alt={platform.name}
+                                className="w-6 h-6 mb-1"
+                              />
+                            ) : (
+                              <span className="text-lg mb-1">🔗</span>
+                            )}
+                            <span className={`text-xs font-medium ${isSelected ? config.text : "text-foreground"}`}>
+                              {platform.name}
+                            </span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Edit workspace in profile page to change platform preferences
+                    </p>
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <Label>Format *</Label>
+                  <Select value={format} onValueChange={(v) => setFormat(v as ContentFormat)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="reel">Reel</SelectItem>
+                      <SelectItem value="post">Post</SelectItem>
+                      <SelectItem value="story">Story</SelectItem>
+                      <SelectItem value="carousel">Carousel</SelectItem>
+                      <SelectItem value="short">Short</SelectItem>
+                      <SelectItem value="long_video">Long Video</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="batch" className="space-y-4 mt-4">
+                {!showBatchForm ? (
+                  <>
+                    <div className="space-y-2">
+                      <Label>Batch (Optional)</Label>
+                      <Select value={selectedBatch} onValueChange={setSelectedBatch}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="No batch" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">No batch</SelectItem>
+                          {batches.map((batch) => (
+                            <SelectItem key={batch.id} value={batch.id}>
+                              {batch.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        Batches help organize multiple pieces of content created together
+                      </p>
+                    </div>
+
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full bg-transparent"
+                      onClick={() => setShowBatchForm(true)}
+                    >
+                      <Plus className="size-4 mr-2" />
+                      Create New Batch
+                    </Button>
                   </>
                 ) : (
                   <div className="space-y-4 border rounded-lg p-4 bg-muted/20">
                     <div className="flex items-center justify-between">
-                      <h3 className="font-medium">Create New Series</h3>
-                      <Button type="button" variant="ghost" size="sm" onClick={() => setShowSeriesForm(false)}>
+                      <h3 className="font-medium">Create New Batch</h3>
+                      <Button type="button" variant="ghost" size="sm" onClick={() => setShowBatchForm(false)}>
                         Cancel
                       </Button>
                     </div>
 
                     <div className="space-y-2">
-                      <Label>Series Name *</Label>
+                      <Label>Batch Name *</Label>
                       <Input
-                        placeholder="My Series Name"
-                        value={newSeriesName}
-                        onChange={(e) => setNewSeriesName(e.target.value)}
+                        placeholder="January 2026 Content"
+                        value={newBatchName}
+                        onChange={(e) => setNewBatchName(e.target.value)}
                       />
                     </div>
 
-                    <div className="space-y-2">
-                      <Label>Series Type</Label>
-                      <Select value={newSeriesType} onValueChange={setNewSeriesType}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="progress">Progress</SelectItem>
-                          <SelectItem value="daily_update">Daily Update</SelectItem>
-                          <SelectItem value="goal_based">Goal Based</SelectItem>
-                          <SelectItem value="custom">Custom</SelectItem>
-                        </SelectContent>
-                      </Select>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Start Date *</Label>
+                        <Input
+                          type="date"
+                          value={newBatchStartDate}
+                          onChange={(e) => setNewBatchStartDate(e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>End Date *</Label>
+                        <Input type="date" value={newBatchEndDate} onChange={(e) => setNewBatchEndDate(e.target.value)} />
+                      </div>
                     </div>
 
-                    <Button type="button" onClick={handleCreateSeries} disabled={isLoading} className="w-full">
-                      {isLoading ? "Creating..." : "Create Series"}
+                    <div className="space-y-2">
+                      <Label>Creators</Label>
+                      <div className="space-y-2">
+                        {creators.map((creator) => (
+                          <div key={creator.id} className="flex items-center space-x-2">
+                            <Checkbox
+                              id={`batch-creator-${creator.id}`}
+                              checked={newBatchCreators.includes(creator.id)}
+                              onCheckedChange={() => toggleBatchCreator(creator.id)}
+                            />
+                            <label htmlFor={`batch-creator-${creator.id}`} className="text-sm cursor-pointer">
+                              {creator.name}
+                            </label>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <Button
+                      type="button"
+                      onClick={handleCreateBatch}
+                      disabled={isLoading || !isBatchFormValid()}
+                      className="w-full"
+                    >
+                      {isLoading ? "Creating..." : "Create Batch"}
                     </Button>
                   </div>
                 )}
+              </TabsContent>
 
-                {selectedSeries !== "none" && (
+              <TabsContent value="strategy" className="space-y-4">
+                <div className="space-y-2 mt-6">
+                  <Label>Content Pillar</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {pillars.map((pillar) => (
+                      <Button
+                        key={pillar.id}
+                        type="button"
+                        variant={selectedPillar === pillar.id ? "default" : "outline"}
+                        className="w-full justify-start"
+                        onClick={() => setSelectedPillar(pillar.id)}
+                      >
+                        {pillar.name}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+
+                {isDoubleDownPillarSelected() && (
                   <div className="space-y-2">
-                    <Label>Episode Number</Label>
-                    <Input
-                      type="number"
-                      placeholder="1"
-                      value={episodeNumber}
-                      onChange={(e) => setEpisodeNumber(e.target.value)}
-                    />
+                    <Label>Search Existing Content</Label>
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Search by hook/title..."
+                        value={contentSearchQuery}
+                        onChange={(e) => setContentSearchQuery(e.target.value)}
+                        className="pl-9"
+                      />
+                    </div>
+                    {filteredContent.length > 0 && (
+                      <div className="max-h-48 overflow-y-auto border rounded-md">
+                        {filteredContent.map((content) => (
+                          <button
+                            key={content.id}
+                            type="button"
+                            className={`w-full text-left p-3 hover:bg-muted/50 border-b last:border-b-0 ${
+                              selectedTemplateContent === content.id ? "bg-primary/10" : ""
+                            }`}
+                            onClick={() => setSelectedTemplateContent(content.id)}
+                          >
+                            <p className="text-sm font-medium">{content.hook || "Untitled"}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {content.format} • {content.four_hs?.name || "No framework"}
+                            </p>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
-              </>
-            )}
-          </TabsContent>
-        </Tabs>
 
-        <div className="flex justify-between pt-4">
-          <Button
-            variant="outline"
-            onClick={() => {
-              const tabs = ["context", "batch", "strategy"]
-              const currentIndex = tabs.indexOf(currentTab)
-              if (currentIndex > 0) {
-                setCurrentTab(tabs[currentIndex - 1])
-              }
-            }}
-            disabled={currentTab === "context"}
-          >
-            <ArrowLeft className="size-4 mr-2" />
-            Back
-          </Button>
+                {selectedPillar && !isSeriesPillarSelected() && getAvailableStyles().length > 0 && (
+                  <div className="space-y-2">
+                    <Label>Content Style</Label>
+                    <Select
+                      value={style}
+                      onValueChange={(v) => setStyle(v as ContentStyle)}
+                      disabled={isDoubleDownPillarSelected() && selectedTemplateContent !== ""}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {getAvailableStyles().map((styleOption) => (
+                          <SelectItem key={styleOption.value} value={styleOption.value}>
+                            {styleOption.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
 
-          {currentTab === "strategy" ? (
-            <Button
-              onClick={handleSubmit}
-              disabled={isLoading || !isFormValid()}
-              className="bg-accent hover:bg-accent/90 text-accent-foreground"
-            >
-              {isLoading ? "Creating..." : "Create Content"}
-            </Button>
-          ) : (
-            <Button
-              onClick={() => {
-                const tabs = ["context", "batch", "strategy"]
-                const currentIndex = tabs.indexOf(currentTab)
-                if (currentIndex < tabs.length - 1) {
-                  setCurrentTab(tabs[currentIndex + 1])
-                }
-              }}
-              className="bg-accent hover:bg-accent/90 text-accent-foreground"
-            >
-              Next
-              <ArrowRight className="size-4 ml-2" />
-            </Button>
-          )}
-        </div>
+                {isStorytellingPillarSelected() && (
+                  <div className="space-y-2">
+                    <Label>Storytelling Format</Label>
+                    <Select value={storytellingFormat} onValueChange={setStorytellingFormat}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select format" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">None</SelectItem>
+                        {storytellingFormats.map((format) => (
+                          <SelectItem key={format.id} value={format.id}>
+                            {format.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {selectedPillar && !isDoubleDownPillarSelected() && !isSeriesPillarSelected() && (
+                  <div className="space-y-2">
+                    <Label>@jun_yuh Framework Day (Optional)</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Link this content to a specific day in your posting schedule
+                    </p>
+                    <Select value={selectedContentType} onValueChange={setSelectedContentType}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select framework day..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">None</SelectItem>
+                        {contentTypes.map((ct) => (
+                          <SelectItem key={ct.id} value={ct.id.toString()}>
+                            Day {ct.id}: {ct.icon} {ct.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <Label>4H Framework</Label>
+                  <div className="grid grid-cols-4 gap-2">
+                    {fourHs.map((fourH) => (
+                      <Button
+                        key={fourH.id}
+                        type="button"
+                        variant={selectedFourH === fourH.id ? "default" : "outline"}
+                        className="w-full"
+                        onClick={() => setSelectedFourH(selectedFourH === fourH.id ? "" : fourH.id)}
+                        disabled={isDoubleDownPillarSelected() && selectedTemplateContent !== ""}
+                      >
+                        {fourH.name}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+
+                {isSeriesPillarSelected() && (
+                  <>
+                    {!showSeriesForm ? (
+                      <>
+                        <div className="space-y-2">
+                          <Label>Series (Optional)</Label>
+                          <div className="flex gap-2">
+                            <Select value={selectedSeries} onValueChange={setSelectedSeries}>
+                              <SelectTrigger className="flex-1">
+                                <SelectValue placeholder="No series" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">No series</SelectItem>
+                                {series.map((s) => (
+                                  <SelectItem key={s.id} value={s.id}>
+                                    {s.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon"
+                              onClick={() => setShowSeriesForm(true)}
+                              disabled={!selectedCreator}
+                            >
+                              <Plus className="size-4" />
+                            </Button>
+                          </div>
+                          {!selectedCreator && (
+                            <p className="text-xs text-muted-foreground">Select a creator first to create a series</p>
+                          )}
+                        </div>
+                      </>
+                    ) : (
+                      <div className="space-y-4 border rounded-lg p-4 bg-muted/20">
+                        <div className="flex items-center justify-between">
+                          <h3 className="font-medium">Create New Series</h3>
+                          <Button type="button" variant="ghost" size="sm" onClick={() => setShowSeriesForm(false)}>
+                            Cancel
+                          </Button>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label>Series Name *</Label>
+                          <Input
+                            placeholder="My Series Name"
+                            value={newSeriesName}
+                            onChange={(e) => setNewSeriesName(e.target.value)}
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label>Series Type</Label>
+                          <Select value={newSeriesType} onValueChange={setNewSeriesType}>
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="progress">Progress</SelectItem>
+                              <SelectItem value="daily_update">Daily Update</SelectItem>
+                              <SelectItem value="goal_based">Goal Based</SelectItem>
+                              <SelectItem value="custom">Custom</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <Button type="button" onClick={handleCreateSeries} disabled={isLoading} className="w-full">
+                          {isLoading ? "Creating..." : "Create Series"}
+                        </Button>
+                      </div>
+                    )}
+
+                    {selectedSeries !== "none" && (
+                      <div className="space-y-2">
+                        <Label>Episode Number</Label>
+                        <Input
+                          type="number"
+                          placeholder="1"
+                          value={episodeNumber}
+                          onChange={(e) => setEpisodeNumber(e.target.value)}
+                        />
+                      </div>
+                    )}
+                  </>
+                )}
+              </TabsContent>
+            </Tabs>
+
+            <div className="flex justify-between pt-4">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  const tabs = ["context", "batch", "strategy"]
+                  const currentIndex = tabs.indexOf(currentTab)
+                  if (currentIndex > 0) {
+                    setCurrentTab(tabs[currentIndex - 1])
+                  }
+                }}
+                disabled={currentTab === "context"}
+              >
+                <ArrowLeft className="size-4 mr-2" />
+                Back
+              </Button>
+
+              {currentTab === "strategy" ? (
+                <Button
+                  onClick={handleSubmit}
+                  disabled={isLoading || !isFormValid()}
+                  className="bg-accent hover:bg-accent/90 text-accent-foreground"
+                >
+                  {isLoading ? "Creating..." : "Create Content"}
+                </Button>
+              ) : (
+                <Button
+                  onClick={() => {
+                    const tabs = ["context", "batch", "strategy"]
+                    const currentIndex = tabs.indexOf(currentTab)
+                    if (currentIndex < tabs.length - 1) {
+                      setCurrentTab(tabs[currentIndex + 1])
+                    }
+                  }}
+                  className="bg-accent hover:bg-accent/90 text-accent-foreground"
+                >
+                  Next
+                  <ArrowRight className="size-4 ml-2" />
+                </Button>
+              )}
+            </div>
+          </div>
+          </>
+        )}
       </DialogContent>
     </Dialog>
   )

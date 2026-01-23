@@ -1248,6 +1248,12 @@ export default function ContentPage() {
                                                 </div>
                                                 <div className="space-y-2 text-sm">
                                                   <div>
+                                                    <span className="text-muted-foreground">Stage:</span>{" "}
+                                                    <Badge className={getStageColor(item.production_stage)} variant="outline">
+                                                      {item.production_stage}
+                                                    </Badge>
+                                                  </div>
+                                                  <div>
                                                     <span className="text-muted-foreground">Content Style:</span>{" "}
                                                     <span className="font-medium">
                                                       {item.style
@@ -1706,6 +1712,12 @@ export default function ContentPage() {
                                             </div>
                                             <div className="space-y-2 text-sm">
                                               <div className="break-words">
+                                                <span className="text-muted-foreground">Stage:</span>{" "}
+                                                <Badge className={getStageColor(item.production_stage)} variant="outline">
+                                                  {item.production_stage}
+                                                </Badge>
+                                              </div>
+                                              <div className="break-words">
                                                 <span className="text-muted-foreground">Content Style:</span>{" "}
                                                 <span className="font-medium break-words">
                                                   {item.style
@@ -1734,12 +1746,6 @@ export default function ContentPage() {
                                                     ? `${item.content_types.id} ${item.content_types.name} ${item.content_types.icon}`
                                                     : "-"}
                                                 </span>
-                                              </div>
-                                              <div className="break-words">
-                                                <span className="text-muted-foreground">Stage:</span>{" "}
-                                                <Badge className={getStageColor(item.production_stage)} variant="outline">
-                                                  {item.production_stage}
-                                                </Badge>
                                               </div>
                                               <div className="break-words">
                                                 <span className="text-muted-foreground">Created:</span>{" "}
