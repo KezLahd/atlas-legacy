@@ -40,6 +40,11 @@ interface CreateContentDialogProps {
     style?: string
     researchId?: string
   }
+  brainstormContext?: {
+    id: string
+    title: string
+    description: string | null
+  }
 }
 
 export function CreateContentDialog({
@@ -52,6 +57,7 @@ export function CreateContentDialog({
   onOpenChange: externalOnOpenChange,
   trigger,
   initialValues,
+  brainstormContext,
 }: CreateContentDialogProps) {
   const supabase = createClient()
   const [internalOpen, setInternalOpen] = useState(false)
@@ -554,6 +560,37 @@ export function CreateContentDialog({
         <DialogHeader>
           <DialogTitle>Create New Content</DialogTitle>
         </DialogHeader>
+
+        {brainstormContext && (
+          <div className="bg-muted/30 border border-border rounded-lg p-4 space-y-2">
+            <div className="flex items-start gap-2">
+              <div className="p-1.5 rounded bg-primary/10">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="text-primary"
+                >
+                  <path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5" />
+                  <path d="M9 18h6" />
+                  <path d="M10 22h4" />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <h4 className="font-medium text-sm">Brainstorm: {brainstormContext.title}</h4>
+                {brainstormContext.description && (
+                  <p className="text-sm text-muted-foreground mt-1">{brainstormContext.description}</p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         <Tabs value={currentTab} onValueChange={setCurrentTab}>
           <TabsList className="grid w-full grid-cols-3 bg-muted/30">

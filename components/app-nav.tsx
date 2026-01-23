@@ -17,6 +17,7 @@ import {
   UsersRound,
   Settings,
   Palette,
+  Lightbulb,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { UserAvatar } from "@/components/user-avatar"
@@ -26,6 +27,7 @@ import { IncompleteProfileBanner } from "@/components/incomplete-profile-banner"
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Content", href: "/content", icon: FileText },
+  { name: "Brainstorm", href: "/brainstorm", icon: Lightbulb },
   { name: "Research", href: "/research", icon: Search },
   { name: "Analytics", href: "/analytics", icon: BarChart3 },
 ]
