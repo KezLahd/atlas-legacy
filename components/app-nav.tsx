@@ -66,35 +66,35 @@ export function AppNav({ userEmail }: { userEmail?: string }) {
           <AtlasLogo className="size-8" showText />
         </Link>
 
-        <nav className="flex items-center gap-1 ml-1 md:ml-6">
-          {navigation.map((item) => {
-            const Icon = item.icon
-            const isActive = pathname === item.href || pathname.startsWith(item.href + "/")
-            return (
-              <Link
-                key={item.name}
-                href={item.href}
-                className={cn(
-                  "flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors",
-                  isActive
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:bg-accent hover:text-foreground",
-                )}
-              >
-                <Icon className="size-4" />
-                <span className="hidden md:inline">{item.name}</span>
-              </Link>
-            )
-          })}
-        </nav>
+        <div className="flex items-center gap-1 ml-1 md:ml-6 flex-1">
+          <nav className="flex items-center gap-1">
+            {navigation.map((item) => {
+              const Icon = item.icon
+              const isActive = pathname === item.href || pathname.startsWith(item.href + "/")
+              return (
+                <Link
+                  key={item.name}
+                  href={item.href}
+                  className={cn(
+                    "flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors",
+                    isActive
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                  )}
+                >
+                  <Icon className="size-4" />
+                  <span className="hidden md:inline">{item.name}</span>
+                </Link>
+              )
+            })}
+          </nav>
 
-        <div className="md:ml-auto">
           <Popover>
             <PopoverTrigger asChild>
               <Button
                 variant="ghost"
                 className={cn(
-                  "flex items-center gap-2 px-3 py-2",
+                  "flex items-center gap-2 px-3 py-2 md:ml-auto",
                   pathname.startsWith("/profile") ? "bg-[#3a2415] text-white hover:bg-[#3a2415]/90" : "",
                 )}
               >
