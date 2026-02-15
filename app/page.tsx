@@ -191,35 +191,51 @@ export default function LandingPage() {
       </header>
 
       {/* Hero Section */}
-      <section className="px-4 py-20 md:py-32 bg-gradient-to-b from-accent/10 to-transparent">
-        <div className="max-w-4xl mx-auto text-center space-y-6">
-          <h1 className="text-4xl md:text-6xl font-bold text-balance leading-tight">
-            Carry the weight of your <span className="text-accent">brand</span>.
-          </h1>
-          <p className="text-lg md:text-xl text-muted-foreground text-balance max-w-2xl mx-auto">
-            Atlas is the creator-first content operating system for planning, producing, batching, and analyzing your
-            personal brand content.
-          </p>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
-            {isLoggedIn ? (
-              <>
-                <Button size="lg" asChild className="bg-primary hover:bg-primary/90 text-primary-foreground">
-                  <Link href="/dashboard">Dashboard</Link>
-                </Button>
-                <Button size="lg" onClick={handleLogout} variant="outline" className="border-muted bg-transparent">
-                  Log Out
-                </Button>
-              </>
-            ) : (
-              <>
-            <Button size="lg" asChild className="bg-primary hover:bg-primary/90 text-primary-foreground">
-              <Link href="/auth/sign-up">Get Started Free</Link>
-            </Button>
-            <Button size="lg" variant="outline" asChild className="border-muted bg-transparent">
-              <Link href="/auth/login">Learn More</Link>
-            </Button>
-              </>
-            )}
+      <section className="px-4 py-16 md:py-24">
+        <div className="max-w-6xl mx-auto space-y-12">
+          <div className="max-w-4xl mx-auto text-center space-y-6">
+            <h1 className="text-4xl md:text-6xl font-bold text-balance leading-tight">
+              Carry the weight of your <span className="text-accent">brand</span>.
+            </h1>
+            <p className="text-lg md:text-xl text-muted-foreground text-balance max-w-2xl mx-auto">
+              The creator-first content operating system for planning, producing, batching, and analyzing your personal brand.
+            </p>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
+              {isLoggedIn ? (
+                <>
+                  <Button size="lg" asChild className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                    <Link href="/dashboard">Dashboard</Link>
+                  </Button>
+                  <Button size="lg" onClick={handleLogout} variant="outline" className="border-muted bg-transparent">
+                    Log Out
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button size="lg" asChild className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                    <Link href="/auth/sign-up">Get Started Free</Link>
+                  </Button>
+                  <Button size="lg" variant="outline" asChild className="border-muted bg-transparent">
+                    <Link href="/auth/login">Learn More</Link>
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
+
+          <div className="max-w-5xl mx-auto">
+            <div className="relative aspect-video rounded-2xl overflow-hidden shadow-2xl border-4 border-white">
+              <video
+                autoPlay
+                loop
+                muted
+                playsInline
+                className="w-full h-full object-cover"
+              >
+                <source src="/videos/atlas-demo.mp4" type="video/mp4" />
+                Your browser does not support the video tag.
+              </video>
+            </div>
           </div>
         </div>
       </section>
