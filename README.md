@@ -109,5 +109,5 @@ No license granted. Source is visible as a portfolio artefact — **all rights r
 ---
 
 <p align="center">
-  <sub>Built by <a href="https://github.com/KezLahd">Kieran Jackson</a> · Chapter zero · 2026</sub>
+  <sub>Built by <a href="https://github.com/KezLahd">Kieran Jackson</a> · Chapter zero · 2026 · Another <a href="https://instagram.com/kieranjxn">Kez Curation ↗</a></sub>
 </p>
